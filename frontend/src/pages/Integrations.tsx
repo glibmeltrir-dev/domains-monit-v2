@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NamecheapAccount, CloudflareAccount, KeitaroTracker } from '../types.ts';
-import { Plus, Edit2, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function Integrations() {
   const [data, setData] = useState<{
@@ -16,10 +16,35 @@ export default function Integrations() {
   
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; table: string; id: number | null }>({ isOpen: false, table: '', id: null });
 
+  const [refreshingId, setRefreshingId] = useState<number | null>(null);
+
   const fetchData = () => {
     fetch('/api/integrations')
       .then(res => res.json())
-      .then(setData);
+      .then((d) => {
+        setData(d);
+        // Pull live Namecheap balances in the background.
+        (d.namecheap as NamecheapAccount[]).forEach((acc) => refreshBalance(acc.id, true));
+      });
+  };
+
+  const refreshBalance = async (id: number, silent = false) => {
+    if (!silent) setRefreshingId(id);
+    try {
+      const res = await fetch(`/api/integrations/namecheap/${id}/refresh-balance`, { method: 'POST' });
+      const j = await res.json();
+      if (res.ok && typeof j.balance === 'number') {
+        setData((prev) =>
+          prev
+            ? { ...prev, namecheap: prev.namecheap.map((a) => (a.id === id ? { ...a, balance: j.balance } : a)) }
+            : prev
+        );
+      }
+    } catch {
+      /* ignore — keep stored balance */
+    } finally {
+      if (!silent) setRefreshingId(null);
+    }
   };
 
   useEffect(() => {
@@ -143,6 +168,9 @@ export default function Integrations() {
               {data.namecheap.map(acc => (
                 <div key={acc.id} className="bg-white/5 border border-white/10 rounded-xl p-4 group/card relative">
                   <div className="absolute top-2 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center gap-1">
+                    <button onClick={() => refreshBalance(acc.id)} title="Обновить баланс" className="p-1.5 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors">
+                      <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === acc.id ? 'animate-spin' : ''}`} />
+                    </button>
                     <button onClick={() => openEdit('namecheap', acc)} className="p-1.5 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
