@@ -36,6 +36,56 @@ const CATEGORY_SETTING: Record<NotifyCategory, string> = {
   purchase: "notify_purchase",
 };
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Telegram rate limits group messages hard (~20/min). Serialize all sends
+// through a single queue with a minimum spacing between messages and honour
+// the server's `retry_after` on 429, so bursts (e.g. mass status transitions)
+// no longer spam failed requests.
+const MIN_INTERVAL_MS = 1500;
+const MAX_QUEUE = 500;
+let chain: Promise<void> = Promise.resolve();
+let lastSentAt = 0;
+let pending = 0;
+
+function enqueueSend(url: string, chat_id: string, text: string): void {
+  if (pending >= MAX_QUEUE) {
+    logger.warn({ pending }, "Telegram queue full, dropping message");
+    return;
+  }
+  pending++;
+  chain = chain
+    .then(async () => {
+      const wait = MIN_INTERVAL_MS - (Date.now() - lastSentAt);
+      if (wait > 0) await sleep(wait);
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await axios.post(
+            url,
+            { chat_id, text, parse_mode: "HTML", disable_web_page_preview: true },
+            { timeout: 10000 }
+          );
+          break;
+        } catch (err: any) {
+          const status = err?.response?.status;
+          const retryAfter = Number(err?.response?.data?.parameters?.retry_after);
+          if (status === 429 && Number.isFinite(retryAfter) && attempt === 0) {
+            await sleep((retryAfter + 1) * 1000);
+            continue;
+          }
+          logger.warn({ err: err?.message, chat_id }, "Telegram send failed");
+          break;
+        }
+      }
+      lastSentAt = Date.now();
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      pending--;
+    });
+}
+
 export async function sendTG(text: string, category?: NotifyCategory): Promise<void> {
   const { token, chatIds } = await getTelegramConfig();
   if (!token || chatIds.length === 0) {
@@ -48,21 +98,9 @@ export async function sendTG(text: string, category?: NotifyCategory): Promise<v
     const flag = await getSetting(CATEGORY_SETTING[category]);
     if (flag === "0") return;
   }
+
+  // Fire-and-forget into the throttled queue — callers (monitor jobs) are not
+  // blocked on delivery.
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  await Promise.all(
-    chatIds.map((chat_id) =>
-      axios
-        .post(
-          url,
-          {
-            chat_id,
-            text,
-            parse_mode: "HTML",
-            disable_web_page_preview: true,
-          },
-          { timeout: 10000 }
-        )
-        .catch((err) => logger.warn({ err: err?.message, chat_id }, "Telegram send failed"))
-    )
-  );
+  for (const chat_id of chatIds) enqueueSend(url, chat_id, text);
 }
