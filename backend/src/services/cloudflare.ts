@@ -144,21 +144,82 @@ export class CloudflareClient {
     }
   }
 
-  // Point every A record in the zone (apex, www, any others) at the target IP.
-  // Domains dedicated to Keitaro should route all A records to the same origin;
-  // updating only the apex leaves www/subdomains on a stale IP. Returns count.
-  async pointAllARecords(
+  // Route the whole domain to the origin the "correct" way:
+  //   - apex (@)  -> A record to the target IP
+  //   - www       -> CNAME to the apex (NOT an A record); any stale www A
+  //                  records are deleted first
+  //   - other A records -> repointed to the target IP as well
+  async pointDomainToOrigin(
     zoneId: string,
     domain: string,
     content: string,
     proxied: boolean
-  ): Promise<number> {
-    const list = await this.http.get(`/zones/${zoneId}/dns_records`, {
-      params: { type: "A", per_page: 100 },
-    });
-    const records = this.unwrap<Array<{ id: string; name: string }>>(list.data);
+  ): Promise<void> {
+    const apex = domain.toLowerCase();
+    const wwwName = `www.${apex}`;
 
-    for (const r of records) {
+    const list = await this.http.get(`/zones/${zoneId}/dns_records`, {
+      params: { per_page: 100 },
+    });
+    const records = this.unwrap<Array<{ id: string; name: string; type: string }>>(list.data);
+    const lc = (s: string) => s.toLowerCase();
+
+    const apexA = records.filter((r) => r.type === "A" && lc(r.name) === apex);
+    const wwwRecs = records.filter((r) => lc(r.name) === wwwName);
+    const otherA = records.filter(
+      (r) => r.type === "A" && lc(r.name) !== apex && lc(r.name) !== wwwName
+    );
+
+    // 1) apex A record -> target IP (create if missing, drop duplicates)
+    if (apexA.length) {
+      await this.http.put(`/zones/${zoneId}/dns_records/${apexA[0].id}`, {
+        type: "A",
+        name: domain,
+        content,
+        proxied,
+        ttl: 1,
+      });
+      for (const dup of apexA.slice(1)) {
+        await this.http.delete(`/zones/${zoneId}/dns_records/${dup.id}`);
+      }
+    } else {
+      await this.http.post(`/zones/${zoneId}/dns_records`, {
+        type: "A",
+        name: domain,
+        content,
+        proxied,
+        ttl: 1,
+      });
+    }
+
+    // 2) www -> CNAME to apex. Delete any non-CNAME (e.g. stale A) www records,
+    //    then upsert the CNAME.
+    const wwwCname = wwwRecs.find((r) => r.type === "CNAME");
+    for (const r of wwwRecs) {
+      if (r.type !== "CNAME") {
+        await this.http.delete(`/zones/${zoneId}/dns_records/${r.id}`);
+      }
+    }
+    if (wwwCname) {
+      await this.http.put(`/zones/${zoneId}/dns_records/${wwwCname.id}`, {
+        type: "CNAME",
+        name: wwwName,
+        content: domain,
+        proxied,
+        ttl: 1,
+      });
+    } else {
+      await this.http.post(`/zones/${zoneId}/dns_records`, {
+        type: "CNAME",
+        name: wwwName,
+        content: domain,
+        proxied,
+        ttl: 1,
+      });
+    }
+
+    // 3) any remaining A records -> keep them pointing at the origin
+    for (const r of otherA) {
       await this.http.put(`/zones/${zoneId}/dns_records/${r.id}`, {
         type: "A",
         name: r.name,
@@ -167,20 +228,6 @@ export class CloudflareClient {
         ttl: 1,
       });
     }
-
-    // Ensure the apex record exists (create it if the zone had none).
-    const hasApex = records.some((r) => r.name.toLowerCase() === domain.toLowerCase());
-    if (!hasApex) {
-      await this.http.post(`/zones/${zoneId}/dns_records`, {
-        type: "A",
-        name: domain,
-        content,
-        proxied,
-        ttl: 1,
-      });
-      return records.length + 1;
-    }
-    return records.length;
   }
 
   async applyTemplate(zoneId: string, tpl: CloudflareTemplate): Promise<void> {
@@ -211,7 +258,7 @@ export class CloudflareClient {
     targetIp = config.keitaroDefaultIp
   ): Promise<ZoneResult> {
     const zone = await this.ensureZone(domain);
-    await this.pointAllARecords(zone.zoneId, domain, targetIp, tpl.proxy_on);
+    await this.pointDomainToOrigin(zone.zoneId, domain, targetIp, tpl.proxy_on);
     await this.applyTemplate(zone.zoneId, tpl);
     return zone;
   }
