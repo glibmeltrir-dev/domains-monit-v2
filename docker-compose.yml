@@ -74,9 +74,13 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    environment:
+      # Basic Auth credentials for the panel (UI + API).
+      PANEL_USER: ${PANEL_USER:-admin}
+      PANEL_PASSWORD: ${PANEL_PASSWORD:-}
     ports:
-      # Bound to localhost by default (access via SSH tunnel) for safety, since
-      # the panel has no authentication. Set FRONTEND_BIND=0.0.0.0 to expose it.
+      # FRONTEND_BIND=127.0.0.1 (default) = localhost only (SSH tunnel).
+      # Set FRONTEND_BIND=0.0.0.0 to expose it by IP — Basic Auth protects it.
       - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
     depends_on:
       - api
