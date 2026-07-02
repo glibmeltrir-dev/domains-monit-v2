@@ -75,7 +75,9 @@ services:
     build: ./frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-8080}:80"
+      # Bound to localhost by default (access via SSH tunnel) for safety, since
+      # the panel has no authentication. Set FRONTEND_BIND=0.0.0.0 to expose it.
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
     depends_on:
       - api
 
