@@ -1,6 +1,6 @@
 import { query } from "../db/pool.ts";
 import { logger } from "../logger.ts";
-import { KeitaroClient } from "./keitaro.ts";
+import { KeitaroClient, keitaroHasGroup } from "./keitaro.ts";
 import { sendTG } from "./telegram.ts";
 import { fetchDomainContext, repointDomain } from "./provision.ts";
 
@@ -51,15 +51,20 @@ export async function checkNewDomain(
   if (!existing) {
     return { newDomain, existsInKeitaro: false, groupId: null, campaigns: [], clean: true };
   }
-  const campaigns = await kc.listCampaigns();
-  const bound = campaigns
-    .filter((c) => Number(c.domain_id) === Number(existing.id))
-    .map((c) => ({ id: c.id, name: c.name }));
-  const clean = existing.group_id == null && bound.length === 0;
+  const hasGroup = keitaroHasGroup(existing.group_id);
+  // Список кампаний тянем только если счётчик ненулевой (для имён в UI).
+  let bound: Array<{ id: number; name: string }> = [];
+  if ((existing.campaigns_count ?? 0) > 0) {
+    const campaigns = await kc.listCampaigns();
+    bound = campaigns
+      .filter((c) => Number(c.domain_id) === Number(existing.id))
+      .map((c) => ({ id: c.id, name: c.name }));
+  }
+  const clean = !hasGroup && (existing.campaigns_count ?? 0) === 0 && bound.length === 0;
   return {
     newDomain,
     existsInKeitaro: true,
-    groupId: existing.group_id ?? null,
+    groupId: hasGroup ? existing.group_id : null,
     campaigns: bound,
     clean,
   };
@@ -82,7 +87,40 @@ export async function getKeitaroUsage(domainId: number): Promise<KeitaroUsage> {
   const used = campaigns
     .filter((c) => Number(c.domain_id) === Number(match.id))
     .map((c) => ({ id: c.id, name: c.name }));
-  return { domain, keitaroId: match.id, groupId: match.group_id ?? null, campaigns: used };
+  return {
+    domain,
+    keitaroId: match.id,
+    groupId: keitaroHasGroup(match.group_id) ? match.group_id : null,
+    campaigns: used,
+  };
+}
+
+// Список "чистых" доменов в Keitaro (без группы и без кампаний) — для выбора
+// нового домена при замене. Берём трекер указанного домена (или первый активный).
+export async function listCleanKeitaroDomains(oldId?: number): Promise<string[]> {
+  let url: string | null = null;
+  let key: string | null = null;
+  if (oldId) {
+    const ctx = await fetchDomainContext(oldId);
+    url = ctx?.keitaro_url ?? null;
+    key = ctx?.keitaro_key ?? null;
+  }
+  if (!url || !key) {
+    const { rows } = await query<{ url: string; api_key: string }>(
+      "SELECT url, api_key FROM keitaro_trackers WHERE status = 'ACTIVE' AND url <> '' AND api_key <> '' ORDER BY id LIMIT 1"
+    );
+    url = rows[0]?.url ?? null;
+    key = rows[0]?.api_key ?? null;
+  }
+  if (!url || !key) throw new Error("Нет активного трекера Keitaro");
+
+  const kc = new KeitaroClient(url, key);
+  const list = await kc.listDomains();
+  return list
+    .filter((d) => !keitaroHasGroup(d.group_id) && (d.campaigns_count ?? 0) === 0)
+    .map((d) => d.name)
+    .filter(Boolean)
+    .sort();
 }
 
 export interface ReplaceReport {
@@ -134,14 +172,9 @@ export async function replaceDomain(oldId: number, newDomainRaw: string): Promis
     const preList = await kc.listDomains();
     const existingNew = preList.find((d) => d.name?.toLowerCase() === newDomain);
     if (existingNew) {
-      if (existingNew.group_id != null) {
-        throw new ReplaceValidationError(
-          "Новый домен уже привязан к группе/кампаниям в Keitaro — выберите чистый домен"
-        );
-      }
-      const preCampaigns = await kc.listCampaigns();
-      const bound = preCampaigns.some((c) => Number(c.domain_id) === Number(existingNew.id));
-      if (bound) {
+      const dirty =
+        keitaroHasGroup(existingNew.group_id) || (existingNew.campaigns_count ?? 0) > 0;
+      if (dirty) {
         throw new ReplaceValidationError(
           "Новый домен уже привязан к группе/кампаниям в Keitaro — выберите чистый домен"
         );
@@ -203,7 +236,7 @@ export async function replaceDomain(oldId: number, newDomainRaw: string): Promis
   // 4) Ищем старый домен в Keitaro, переносим его группу на новый домен.
   const oldK = kDomains.find((d) => d.name?.toLowerCase() === oldDomain);
   report.oldKeitaroId = oldK?.id ?? null;
-  const groupId = oldK?.group_id ?? null;
+  const groupId = keitaroHasGroup(oldK?.group_id) ? oldK!.group_id : null;
   report.groupId = groupId;
 
   if (newK && groupId != null) {

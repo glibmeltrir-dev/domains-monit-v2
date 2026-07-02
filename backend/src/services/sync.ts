@@ -2,7 +2,7 @@ import { query } from "../db/pool.ts";
 import { logger } from "../logger.ts";
 import { CloudflareClient } from "./cloudflare.ts";
 import { NamecheapClient } from "./namecheap.ts";
-import { KeitaroClient } from "./keitaro.ts";
+import { KeitaroClient, keitaroHasGroup } from "./keitaro.ts";
 
 export interface SyncSummary {
   domains: number;
@@ -136,21 +136,20 @@ export async function syncAll(): Promise<SyncSummary> {
 
     if (trackers.length) {
       const registered = new Set<string>();
-      // Имя домена (lower) -> group_id, и карта id группы -> имя (по всем трекерам).
-      const domainGroup = new Map<string, number | null>();
-      const groupNameById = new Map<number, string>();
+      // Имя домена (lower) -> { group_id, group_name } из самого объекта домена.
+      const domainGroup = new Map<string, { id: number | null; name: string | null }>();
       for (const t of trackers) {
         try {
           const client = new KeitaroClient(t.url, t.api_key);
-          const [list, groups] = await Promise.all([
-            client.listDomains(),
-            client.listGroups().catch(() => []),
-          ]);
-          for (const g of groups) groupNameById.set(g.id, g.name);
+          const list = await client.listDomains();
           for (const d of list) {
             const name = String(d.name).toLowerCase();
             registered.add(name);
-            domainGroup.set(name, d.group_id ?? null);
+            const has = keitaroHasGroup(d.group_id);
+            domainGroup.set(name, {
+              id: has ? d.group_id : null,
+              name: has ? d.group ?? null : null,
+            });
           }
         } catch (e: any) {
           summary.errors.push(`Keitaro#${t.id}: ${e.message}`);
@@ -167,10 +166,10 @@ export async function syncAll(): Promise<SyncSummary> {
       const gids: (number | null)[] = [];
       const gnames: (string | null)[] = [];
       for (const d of domains) {
-        const gid = domainGroup.get(d.domain_name.toLowerCase()) ?? null;
+        const g = domainGroup.get(d.domain_name.toLowerCase());
         ids.push(d.id);
-        gids.push(gid);
-        gnames.push(gid != null ? groupNameById.get(gid) ?? null : null);
+        gids.push(g?.id ?? null);
+        gnames.push(g?.name ?? null);
       }
       if (ids.length) {
         await query(

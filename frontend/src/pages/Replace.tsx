@@ -45,11 +45,38 @@ export default function Replace() {
   const [report, setReport] = useState<ReplaceReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Список "чистых" доменов Keitaro (без группы и кампаний) для выбора нового.
+  const [cleanDomains, setCleanDomains] = useState<string[]>([]);
+  const [cleanLoading, setCleanLoading] = useState(false);
+  const [newQuery, setNewQuery] = useState('');
+  const [newOpen, setNewOpen] = useState(false);
+
   useEffect(() => {
     fetch('/api/domains')
       .then(res => res.json())
       .then((data: Domain[]) => setDomains(Array.isArray(data) ? data : []));
   }, []);
+
+  const loadClean = (forOldId: number | null) => {
+    setCleanLoading(true);
+    const url = forOldId != null ? `/api/domains/keitaro-clean?oldId=${forOldId}` : '/api/domains/keitaro-clean';
+    fetch(url)
+      .then(res => res.json())
+      .then((data: { domains?: string[] }) => setCleanDomains(Array.isArray(data.domains) ? data.domains : []))
+      .catch(() => setCleanDomains([]))
+      .finally(() => setCleanLoading(false));
+  };
+
+  // Тянем чистые домены под трекер выбранного домена (или общий, если не выбран).
+  useEffect(() => {
+    loadClean(oldId);
+  }, [oldId]);
+
+  const filteredClean = useMemo(() => {
+    const q = newQuery.trim().toLowerCase();
+    const list = q ? cleanDomains.filter(n => n.toLowerCase().includes(q)) : cleanDomains;
+    return list.slice(0, 100);
+  }, [cleanDomains, newQuery]);
 
   const selected = domains.find(d => d.id === oldId) || null;
 
@@ -111,10 +138,12 @@ export default function Replace() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Ошибка замены');
       setReport(data);
-      // Обновляем список доменов после успешной замены.
+      // Обновляем список доменов и чистых доменов после успешной замены.
       fetch('/api/domains').then(r => r.json()).then((d: Domain[]) => setDomains(Array.isArray(d) ? d : []));
+      loadClean(null);
       setOldId(null);
       setNewDomain('');
+      setNewQuery('');
       setQuery('');
     } catch (e: any) {
       setError(e.message || 'Ошибка замены');
@@ -181,14 +210,42 @@ export default function Replace() {
         {/* Новый домен + план */}
         <div className="col-span-2 flex flex-col gap-6 min-h-0 overflow-auto">
           <div className="bg-white/5 border border-white/10 rounded-xl p-5">
-            <label className="block text-xs text-white/50 mb-2">Новый домен</label>
-            <input
-              type="text"
-              placeholder="example.com"
-              value={newDomain}
-              onChange={(e) => setNewDomain(e.target.value)}
-              className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-sm font-mono focus:outline-none focus:border-[#FFBC03]"
-            />
+            <label className="block text-xs text-white/50 mb-2">Новый домен (чистый в Keitaro)</label>
+            <div className="relative">
+              {newOpen && <div className="fixed inset-0 z-10" onClick={() => setNewOpen(false)} />}
+              <input
+                type="text"
+                placeholder={cleanLoading ? 'Загрузка чистых доменов...' : 'Поиск чистого домена...'}
+                value={newQuery}
+                onChange={(e) => { setNewQuery(e.target.value); setNewOpen(true); }}
+                onFocus={() => setNewOpen(true)}
+                className="w-full bg-black/20 border border-white/10 rounded-lg px-4 py-2 text-sm font-mono focus:outline-none focus:border-[#FFBC03]"
+              />
+              {newOpen && (
+                <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto bg-[#2a2a2a] border border-white/10 rounded-lg shadow-xl">
+                  {cleanLoading ? (
+                    <div className="px-3 py-3 text-sm text-white/50 flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Загрузка...
+                    </div>
+                  ) : filteredClean.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-white/40">Нет чистых доменов</div>
+                  ) : (
+                    filteredClean.map(name => (
+                      <button
+                        key={name}
+                        onClick={() => { setNewDomain(name); setNewQuery(name); setNewOpen(false); }}
+                        className={`w-full text-left px-3 py-2 text-sm font-mono hover:bg-white/10 transition-colors ${name === newDomain ? 'text-[#FFBC03]' : 'text-white/80'}`}
+                      >
+                        {name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-white/40">
+              Только домены из Keitaro без группы и кампаний{cleanDomains.length ? ` — доступно ${cleanDomains.length}` : ''}.
+            </p>
 
             <div className="mt-5 flex items-center gap-3 text-sm">
               <span className="px-3 py-1.5 rounded-lg bg-black/20 border border-white/10 font-mono text-white/80">

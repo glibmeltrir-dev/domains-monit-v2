@@ -4,6 +4,13 @@ export interface KeitaroDomain {
   id: number;
   name: string;
   group_id: number | null;
+  group: string | null;
+  campaigns_count: number;
+}
+
+// Keitaro encodes "no group" as group_id === 0 (not null). Treat both as empty.
+export function keitaroHasGroup(groupId: number | null | undefined): boolean {
+  return groupId != null && groupId !== 0;
 }
 
 export interface KeitaroCampaign {
@@ -44,6 +51,8 @@ export class KeitaroClient {
       id: d.id,
       name: d.name,
       group_id: d.group_id ?? null,
+      group: d.group ?? null,
+      campaigns_count: Number(d.campaigns_count ?? 0),
     }));
   }
 

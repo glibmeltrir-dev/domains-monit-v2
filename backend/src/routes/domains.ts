@@ -6,6 +6,7 @@ import { removeFromKeitaro } from "../services/provision.ts";
 import {
   checkNewDomain,
   getKeitaroUsage,
+  listCleanKeitaroDomains,
   replaceDomain,
   ReplaceValidationError,
 } from "../services/replace.ts";
@@ -261,6 +262,18 @@ domainsRouter.get("/:id/new-domain-check", async (req, res) => {
     if (!newDomain.trim()) return res.status(400).json({ error: "newDomain обязателен" });
     const result = await checkNewDomain(Number(req.params.id), newDomain);
     res.json(result);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Searchable list of "clean" Keitaro domains (no group, no campaigns) to pick
+// as a replacement target. Optional ?oldId= to use that domain's tracker.
+domainsRouter.get("/keitaro-clean", async (req, res) => {
+  try {
+    const oldId = req.query.oldId ? Number(req.query.oldId) : undefined;
+    const domains = await listCleanKeitaroDomains(oldId);
+    res.json({ domains });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
