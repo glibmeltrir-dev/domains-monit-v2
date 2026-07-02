@@ -12,6 +12,8 @@ export default function Domains() {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Anchor for shift-click range selection.
+  const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -84,11 +86,29 @@ export default function Domains() {
     fetch('/api/integrations').then(res => res.json()).then(data => setNcAccounts(data.namecheap));
   }, []);
 
-  const toggleSelect = (id: number) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setSelectedIds(newSet);
+  const handleSelect = (e: React.MouseEvent, id: number) => {
+    // Shift-click: select the whole range between the anchor and this row
+    // (based on the current filtered order), matching the anchor's state.
+    if (e.shiftKey && lastSelectedId !== null && lastSelectedId !== id) {
+      const ids = filteredDomains.map(d => d.id);
+      const a = ids.indexOf(lastSelectedId);
+      const b = ids.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        const [start, end] = a < b ? [a, b] : [b, a];
+        const range = ids.slice(start, end + 1);
+        const shouldSelect = selectedIds.has(lastSelectedId);
+        const next = new Set(selectedIds);
+        range.forEach(rid => (shouldSelect ? next.add(rid) : next.delete(rid)));
+        setSelectedIds(next);
+        setLastSelectedId(id);
+        return;
+      }
+    }
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+    setLastSelectedId(id);
   };
 
   const filteredDomains = domains.filter(d => {
@@ -246,7 +266,7 @@ export default function Domains() {
                 paginatedDomains.map(domain => (
                   <tr key={domain.id} className={`hover:bg-white/[0.02] transition-colors group ${selectedIds.has(domain.id) ? 'bg-white/[0.02]' : ''}`}>
                     <td className="px-4 py-3">
-                      <button onClick={() => toggleSelect(domain.id)} className="text-white/40 hover:text-white">
+                      <button onClick={(e) => handleSelect(e, domain.id)} className="text-white/40 hover:text-white select-none">
                         {selectedIds.has(domain.id) ? (
                           <CheckSquare className="w-4 h-4 text-[#FFBC03]" />
                         ) : (
