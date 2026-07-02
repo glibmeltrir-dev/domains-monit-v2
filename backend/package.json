@@ -1,0 +1,36 @@
+{
+  "name": "domains-monit-backend",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain purchase, provisioning and monitoring backend (Express + BullMQ + PostgreSQL)",
+  "scripts": {
+    "api": "tsx src/index.ts",
+    "worker": "tsx src/workers/index.ts",
+    "scheduler": "tsx src/scheduler.ts",
+    "migrate": "tsx src/db/migrate.ts",
+    "seed": "tsx src/seed.ts",
+    "dev:api": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/workers/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "bullmq": "^5.34.10",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "fast-xml-parser": "^4.5.1",
+    "pg": "^8.13.1",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
