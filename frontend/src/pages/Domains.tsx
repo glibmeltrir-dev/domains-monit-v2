@@ -49,9 +49,10 @@ export default function Domains() {
     domain: string;
     loading: boolean;
     groupId: number | null;
+    groupName: string | null;
     campaigns: Array<{ id: number; name: string }>;
     error: string | null;
-  }>({ isOpen: false, domain: '', loading: false, groupId: null, campaigns: [], error: null });
+  }>({ isOpen: false, domain: '', loading: false, groupId: null, groupName: null, campaigns: [], error: null });
 
   // Provider sync / Keitaro actions
   const [syncing, setSyncing] = useState(false);
@@ -99,7 +100,7 @@ export default function Domains() {
   };
 
   const openCampaigns = async (id: number, domain: string) => {
-    setCampaignsModal({ isOpen: true, domain, loading: true, groupId: null, campaigns: [], error: null });
+    setCampaignsModal({ isOpen: true, domain, loading: true, groupId: null, groupName: null, campaigns: [], error: null });
     try {
       const res = await fetch(`/api/domains/${id}/keitaro-usage`);
       const data = await res.json();
@@ -109,11 +110,12 @@ export default function Domains() {
         domain,
         loading: false,
         groupId: data.groupId ?? null,
+        groupName: data.groupName ?? null,
         campaigns: data.campaigns ?? [],
         error: null,
       });
     } catch (e: any) {
-      setCampaignsModal({ isOpen: true, domain, loading: false, groupId: null, campaigns: [], error: e.message || 'Ошибка загрузки' });
+      setCampaignsModal({ isOpen: true, domain, loading: false, groupId: null, groupName: null, campaigns: [], error: e.message || 'Ошибка загрузки' });
     }
   };
 
@@ -455,9 +457,13 @@ export default function Domains() {
                     </td>
                     {/* Keitaro group */}
                     <td className="px-4 py-3 text-xs">
-                      {domain.keitaro_group_name ? (
+                      {domain.keitaro_group_name || domain.keitaro_group_id != null ? (
                         <span className="inline-flex items-center gap-1 text-white/70">
-                          <Users className="w-3 h-3 text-white/40" /> {domain.keitaro_group_name}
+                          <Users className="w-3 h-3 text-white/40" />
+                          {domain.keitaro_group_name || `#${domain.keitaro_group_id}`}
+                          {domain.keitaro_group_name && domain.keitaro_group_id != null && (
+                            <span className="text-white/40">(#{domain.keitaro_group_id})</span>
+                          )}
                         </span>
                       ) : (
                         <span className="text-white/40">—</span>
@@ -585,7 +591,7 @@ export default function Domains() {
               <div className="flex items-center justify-between text-sm mb-4">
                 <span className="font-mono text-white/80">{campaignsModal.domain}</span>
                 <span className="flex items-center gap-1.5 text-white/60">
-                  <Users className="w-3.5 h-3.5 text-white/40" /> Группа: <span className="text-white">{campaignsModal.groupId ?? '—'}</span>
+                  <Users className="w-3.5 h-3.5 text-white/40" /> Группа: <span className="text-white">{campaignsModal.groupName ? `${campaignsModal.groupName}${campaignsModal.groupId != null ? ` (#${campaignsModal.groupId})` : ''}` : campaignsModal.groupId != null ? `#${campaignsModal.groupId}` : '—'}</span>
                 </span>
               </div>
 

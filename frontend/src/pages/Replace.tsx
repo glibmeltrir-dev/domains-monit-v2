@@ -6,6 +6,7 @@ interface KeitaroUsage {
   domain: string;
   keitaroId: number | null;
   groupId: number | null;
+  groupName: string | null;
   campaigns: Array<{ id: number; name: string }>;
 }
 
@@ -13,6 +14,7 @@ interface NewDomainCheck {
   newDomain: string;
   existsInKeitaro: boolean;
   groupId: number | null;
+  groupName: string | null;
   campaigns: Array<{ id: number; name: string }>;
   clean: boolean;
 }
@@ -24,6 +26,7 @@ interface ReplaceReport {
   newKeitaroId: number | null;
   oldKeitaroId: number | null;
   groupId: number | null;
+  groupName: string | null;
   campaignsRebound: number;
   steps: string[];
   warnings: string[];
@@ -123,6 +126,13 @@ export default function Replace() {
 
   const daysLeft = (d?: string | null) =>
     d ? Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000) : null;
+
+  const groupLabel = (name?: string | null, id?: number | null) => {
+    if (name && id != null) return `${name} (#${id})`;
+    if (name) return name;
+    if (id != null) return `#${id}`;
+    return '—';
+  };
 
   const runReplace = async () => {
     if (!oldId || !newDomain.trim()) return;
@@ -306,7 +316,7 @@ export default function Replace() {
                   <div className="flex items-center gap-6 text-sm">
                     <span className="flex items-center gap-2 text-white/70">
                       <Users className="w-4 h-4 text-white/40" />
-                      Группа: <span className="text-white">{usage.groupId ?? '—'}</span>
+                      Группа: <span className="text-white">{groupLabel(usage.groupName, usage.groupId)}</span>
                     </span>
                     <span className="flex items-center gap-2 text-white/70">
                       <Megaphone className="w-4 h-4 text-white/40" />
@@ -353,7 +363,7 @@ export default function Replace() {
                 </div>
                 <div className="flex justify-between bg-black/20 rounded-lg px-3 py-2">
                   <span className="text-white/50">Группа</span>
-                  <span>{report.groupId ?? '—'}</span>
+                  <span>{groupLabel(report.groupName, report.groupId)}</span>
                 </div>
                 <div className="flex justify-between bg-black/20 rounded-lg px-3 py-2">
                   <span className="text-white/50">Кампаний перепривязано</span>

@@ -19,6 +19,7 @@ export interface KeitaroUsage {
   domain: string;
   keitaroId: number | null;
   groupId: number | null;
+  groupName: string | null;
   campaigns: Array<{ id: number; name: string }>;
 }
 
@@ -26,6 +27,7 @@ export interface NewDomainCheck {
   newDomain: string;
   existsInKeitaro: boolean;
   groupId: number | null;
+  groupName: string | null;
   campaigns: Array<{ id: number; name: string }>;
   clean: boolean;
 }
@@ -49,7 +51,14 @@ export async function checkNewDomain(
   const list = await kc.listDomains();
   const existing = list.find((d) => d.name?.toLowerCase() === newDomain);
   if (!existing) {
-    return { newDomain, existsInKeitaro: false, groupId: null, campaigns: [], clean: true };
+    return {
+      newDomain,
+      existsInKeitaro: false,
+      groupId: null,
+      groupName: null,
+      campaigns: [],
+      clean: true,
+    };
   }
   const hasGroup = keitaroHasGroup(existing.group_id);
   // Список кампаний тянем только если счётчик ненулевой (для имён в UI).
@@ -65,6 +74,7 @@ export async function checkNewDomain(
     newDomain,
     existsInKeitaro: true,
     groupId: hasGroup ? existing.group_id : null,
+    groupName: hasGroup ? existing.group ?? null : null,
     campaigns: bound,
     clean,
   };
@@ -77,20 +87,22 @@ export async function getKeitaroUsage(domainId: number): Promise<KeitaroUsage> {
   if (!ctx) throw new Error(`Домен ${domainId} не найден`);
   const domain = String(ctx.domain_name || "").toLowerCase();
   if (!ctx.keitaro_url || !ctx.keitaro_key) {
-    return { domain, keitaroId: null, groupId: null, campaigns: [] };
+    return { domain, keitaroId: null, groupId: null, groupName: null, campaigns: [] };
   }
   const kc = new KeitaroClient(ctx.keitaro_url, ctx.keitaro_key);
   const list = await kc.listDomains();
   const match = list.find((d) => d.name?.toLowerCase() === domain);
-  if (!match) return { domain, keitaroId: null, groupId: null, campaigns: [] };
+  if (!match) return { domain, keitaroId: null, groupId: null, groupName: null, campaigns: [] };
   const campaigns = await kc.listCampaigns();
   const used = campaigns
     .filter((c) => Number(c.domain_id) === Number(match.id))
     .map((c) => ({ id: c.id, name: c.name }));
+  const hasGroup = keitaroHasGroup(match.group_id);
   return {
     domain,
     keitaroId: match.id,
-    groupId: keitaroHasGroup(match.group_id) ? match.group_id : null,
+    groupId: hasGroup ? match.group_id : null,
+    groupName: hasGroup ? match.group ?? null : null,
     campaigns: used,
   };
 }
@@ -130,6 +142,7 @@ export interface ReplaceReport {
   newKeitaroId: number | null;
   oldKeitaroId: number | null;
   groupId: number | null;
+  groupName: string | null;
   campaignsRebound: number;
   steps: string[];
   warnings: string[];
@@ -158,6 +171,7 @@ export async function replaceDomain(oldId: number, newDomainRaw: string): Promis
     newKeitaroId: null,
     oldKeitaroId: null,
     groupId: null,
+    groupName: null,
     campaignsRebound: 0,
     steps: [],
     warnings: [],
@@ -238,6 +252,7 @@ export async function replaceDomain(oldId: number, newDomainRaw: string): Promis
   report.oldKeitaroId = oldK?.id ?? null;
   const groupId = keitaroHasGroup(oldK?.group_id) ? oldK!.group_id : null;
   report.groupId = groupId;
+  report.groupName = groupId != null ? oldK?.group ?? null : null;
 
   if (newK && groupId != null) {
     try {
@@ -282,9 +297,15 @@ export async function replaceDomain(oldId: number, newDomainRaw: string): Promis
   logger.info({ oldDomain, newDomain, report }, "Domain replaced");
 
   // 7) Уведомление в Telegram.
+  const groupLabel =
+    report.groupName && groupId != null
+      ? `${report.groupName} (#${groupId})`
+      : groupId != null
+        ? `#${groupId}`
+        : "—";
   await sendTG(
     `♻️ <b>ЗАМЕНА</b> ${oldDomain} → ${newDomain}\n` +
-      `Группа: ${groupId ?? "—"} • кампаний перепривязано: ${report.campaignsRebound}`,
+      `Группа: ${groupLabel} • кампаний перепривязано: ${report.campaignsRebound}`,
     "purchase"
   );
 
