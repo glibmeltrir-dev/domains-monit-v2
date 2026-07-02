@@ -105,6 +105,22 @@ cd frontend && npm install && npm run dev
 | POST | `/api/settings/test-telegram` | тестовое сообщение |
 | CRUD | `/api/crud/:table[/:id]` | интеграции и шаблоны |
 
+## Управление через Makefile
+
+```bash
+make            # список команд
+make rebuild    # собрать образы и поднять стек
+make deploy     # git pull + пересборка + рестарт (обновление на сервере)
+make seed       # импорт доменов/шаблонов/интеграций (один раз)
+make ps         # статус контейнеров
+make status     # сводка UP/DOWN/PENDING по доменам
+make logs s=worker   # логи конкретного сервиса
+make restart-app     # рестарт api+worker+scheduler
+make psql       # psql-шелл в контейнере postgres
+make down       # остановить (данные сохраняются)
+make nuke       # ОПАСНО: удалить контейнеры и тома с данными
+```
+
 ## Утилиты
 
 Удаление macOS‑мусора (`._*`, `.DS_Store`) — актуально при работе на exFAT/сетевом диске:
