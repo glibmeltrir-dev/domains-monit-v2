@@ -11,15 +11,27 @@ interface GroupAccounts {
   keitaro: any | null;
 }
 
+// Prefer an account in the selected group, but fall back to any account of
+// that type so a single-group / no-group setup still works.
+async function pickAccount(table: string, groupId: number | null): Promise<any | null> {
+  if (groupId) {
+    const inGroup = await query(
+      `SELECT * FROM ${table} WHERE group_id = $1 ORDER BY id LIMIT 1`,
+      [groupId]
+    );
+    if (inGroup.rows[0]) return inGroup.rows[0];
+  }
+  const any = await query(`SELECT * FROM ${table} ORDER BY id LIMIT 1`);
+  return any.rows[0] ?? null;
+}
+
 async function resolveGroupAccounts(groupId: number | null): Promise<GroupAccounts> {
-  const where = groupId ? "WHERE group_id = $1" : "";
-  const params = groupId ? [groupId] : [];
-  const [nc, cf, k] = await Promise.all([
-    query(`SELECT * FROM namecheap_accounts ${where} ORDER BY id LIMIT 1`, params),
-    query(`SELECT * FROM cloudflare_accounts ${where} ORDER BY id LIMIT 1`, params),
-    query(`SELECT * FROM keitaro_trackers ${where} ORDER BY id LIMIT 1`, params),
+  const [namecheap, cloudflare, keitaro] = await Promise.all([
+    pickAccount("namecheap_accounts", groupId),
+    pickAccount("cloudflare_accounts", groupId),
+    pickAccount("keitaro_trackers", groupId),
   ]);
-  return { namecheap: nc.rows[0] ?? null, cloudflare: cf.rows[0] ?? null, keitaro: k.rows[0] ?? null };
+  return { namecheap, cloudflare, keitaro };
 }
 
 function cleanDomain(raw: string): string {

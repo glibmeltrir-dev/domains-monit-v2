@@ -85,8 +85,11 @@ export class NamecheapClient {
 
   async getBalance(): Promise<number> {
     const cmd = await this.call("namecheap.users.getBalances", {});
-    const balance = cmd?.UserGetBalancesResult?.["@_AvailableBalance"];
-    return balance ? Number(balance) : 0;
+    const raw = cmd?.UserGetBalancesResult?.["@_AvailableBalance"];
+    if (raw === undefined || raw === null) return 0;
+    // Strip currency symbols / thousands separators, keep digits and dot.
+    const n = Number(String(raw).replace(/[^0-9.]/g, ""));
+    return Number.isFinite(n) ? n : 0;
   }
 
   async registerDomain(
