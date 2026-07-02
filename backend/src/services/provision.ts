@@ -65,8 +65,10 @@ export async function repointDomain(domainId: number): Promise<void> {
 
   const zone = await cf.connectDomain(domain, tpl, targetIp);
 
-  let keitaroOk = false;
-  if (ctx.keitaro_url && ctx.keitaro_key) {
+  // Already in the tracker (per the last sync)? Skip the API call entirely to
+  // avoid a needless request / duplicate attempt.
+  let keitaroOk = ctx.keitaro_registered === true;
+  if (!keitaroOk && ctx.keitaro_url && ctx.keitaro_key) {
     try {
       await new KeitaroClient(ctx.keitaro_url, ctx.keitaro_key).addDomain(domain);
       keitaroOk = true;
