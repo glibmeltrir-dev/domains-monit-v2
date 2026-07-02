@@ -1,6 +1,12 @@
 import { query } from "../db/pool.ts";
 import { logger } from "../logger.ts";
-import { httpCheck, getSSLTill, getDomainExpiry, normalizeUrl } from "./checkers.ts";
+import {
+  httpCheck,
+  getSSLTill,
+  getDomainExpiry,
+  normalizeUrl,
+  resolveNsRecords,
+} from "./checkers.ts";
 import { sendTG, getSetting } from "./telegram.ts";
 
 interface DomainRow {
@@ -176,6 +182,9 @@ export async function checkDomain(domainId: number): Promise<void> {
     await addIncident(m.id, "domain_expiry", msg);
   }
 
+  // Delegated name servers (best effort, keeps NS fresh for every domain).
+  const nsRecords = await resolveNsRecords(m.domain_name);
+
   await query(
     `UPDATE domains
      SET monitoring_status = $1,
@@ -185,8 +194,9 @@ export async function checkDomain(domainId: number): Promise<void> {
          ssl_valid_till = COALESCE($5, ssl_valid_till),
          ssl = COALESCE($6, ssl),
          expiration_date = COALESCE($7, expiration_date),
+         ns = CASE WHEN $8 <> '' THEN $8 ELSE ns END,
          last_check = now()
-     WHERE id = $8`,
+     WHERE id = $9`,
     [
       monitoringStatus,
       httpCode,
@@ -195,6 +205,7 @@ export async function checkDomain(domainId: number): Promise<void> {
       sslTill ? sslTill.toISOString() : null,
       sslTill ? (sslTill < new Date() ? "Expired" : "Valid") : null,
       domainExpiry ? domainExpiry.toISOString() : null,
+      nsRecords.join("\n"),
       m.id,
     ]
   );

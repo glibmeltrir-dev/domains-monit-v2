@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Domain, NamecheapAccount } from '../types.ts';
-import { Search, Filter, MoreHorizontal, RefreshCw, Trash2, CheckSquare, Square, ChevronLeft, ChevronRight, Settings, ExternalLink, X, AlertTriangle } from 'lucide-react';
+import { Search, MoreHorizontal, RefreshCw, Trash2, CheckSquare, Square, ChevronLeft, ChevronRight, Settings, ExternalLink, X, AlertTriangle, Target, ShieldCheck, ShieldAlert, Cloud } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 export default function Domains() {
@@ -24,6 +24,51 @@ export default function Domains() {
   // Modals
   const [renewModal, setRenewModal] = useState<{ isOpen: boolean; ids: number[] }>({ isOpen: false, ids: [] });
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; ids: number[] }>({ isOpen: false, ids: [] });
+
+  // Provider sync / Keitaro actions
+  const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const flash = (m: string) => {
+    setToast(m);
+    setTimeout(() => setToast(null), 6000);
+  };
+
+  const runSync = async () => {
+    setSyncing(true);
+    try {
+      await fetch('/api/domains/sync', { method: 'POST' });
+      flash('Синхронизация с Cloudflare / Namecheap / Keitaro запущена — данные обновятся в фоне.');
+    } catch {
+      flash('Не удалось запустить синхронизацию.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const monitorCheck = async (id: number) => {
+    try {
+      await fetch(`/api/domains/${id}/check`, { method: 'POST' });
+      flash('Проверка запущена.');
+    } catch {
+      flash('Не удалось запустить проверку.');
+    }
+  };
+
+  const pointToKeitaro = async (ids: number[]) => {
+    if (!ids.length) return;
+    try {
+      await fetch('/api/domains/point-to-keitaro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      setSelectedIds(new Set());
+      flash(`Направляем ${ids.length} домен(ов) на Keitaro — DNS и привязка обновляются в фоне.`);
+    } catch {
+      flash('Не удалось поставить задачу.');
+    }
+  };
 
   const fetchData = () => {
     fetch('/api/domains')
@@ -94,6 +139,10 @@ export default function Domains() {
     }
   }
 
+  const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : '—');
+  const daysLeft = (d?: string | null) =>
+    d ? Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000) : null;
+
   return (
     <div className="p-8 h-full flex flex-col relative">
       <div className="flex items-center justify-between mb-8">
@@ -122,18 +171,33 @@ export default function Domains() {
             <option value="SLOW">SLOW</option>
             <option value="DOWN">DOWN</option>
           </select>
+          <button
+            onClick={runSync}
+            disabled={syncing}
+            title="Обновить NS, реальный IP, срок домена и наличие в Keitaro"
+            className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-sm transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            Синхронизировать
+          </button>
         </div>
       </div>
+
+      {toast && (
+        <div className="mb-4 rounded-lg border border-[#FFBC03]/30 bg-[#FFBC03]/10 px-4 py-2.5 text-sm text-[#FFBC03]">
+          {toast}
+        </div>
+      )}
 
       <div className="flex-1 bg-black/20 rounded-xl border border-white/5 overflow-hidden flex flex-col">
         {selectedIds.size > 0 && (
           <div className="bg-[#FFBC03]/10 border-b border-[#FFBC03]/20 px-4 py-3 flex items-center justify-between">
             <span className="text-sm font-medium text-[#FFBC03]">Выбрано доменов: {selectedIds.size}</span>
             <div className="flex items-center gap-2">
+              <button onClick={() => pointToKeitaro(Array.from(selectedIds))} className="text-xs font-medium px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded border border-emerald-500/20 transition-colors flex items-center gap-1">
+                <Target className="w-3 h-3" /> Направить на Keitaro
+              </button>
               <button onClick={() => setRenewModal({ isOpen: true, ids: Array.from(selectedIds) })} className="text-xs font-medium px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 transition-colors">Продлить</button>
-              <button className="text-xs font-medium px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 transition-colors">Сменить CF</button>
-              <button className="text-xs font-medium px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 transition-colors">Сменить Keitaro</button>
-              <button className="text-xs font-medium px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 transition-colors">DNS Шаблон</button>
               <button onClick={() => setDeleteModal({ isOpen: true, ids: Array.from(selectedIds) })} className="text-xs font-medium px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded border border-rose-500/20 transition-colors flex items-center gap-1">
                 <Trash2 className="w-3 h-3" /> Удалить
               </button>
@@ -155,12 +219,12 @@ export default function Domains() {
                   </button>
                 </th>
                 <th className="px-4 py-3 font-medium">Домен</th>
-                <th className="px-4 py-3 font-medium">Статус</th>
-                <th className="px-4 py-3 font-medium">Регистратор</th>
-                <th className="px-4 py-3 font-medium">Окончание</th>
                 <th className="px-4 py-3 font-medium">Мониторинг</th>
-                <th className="px-4 py-3 font-medium">NS</th>
+                <th className="px-4 py-3 font-medium">SSL до</th>
+                <th className="px-4 py-3 font-medium">Домен до</th>
+                <th className="px-4 py-3 font-medium">Реальный IP</th>
                 <th className="px-4 py-3 font-medium">Keitaro</th>
+                <th className="px-4 py-3 font-medium">NS</th>
                 <th className="px-4 py-3 font-medium text-right">Действия</th>
               </tr>
             </thead>
@@ -192,13 +256,6 @@ export default function Domains() {
                     </td>
                     <td className="px-4 py-3 font-medium">{domain.domain_name}</td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400">
-                        {domain.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-white/70">{domain.registrar}</td>
-                    <td className="px-4 py-3 text-white/70">{domain.expiration_date ? new Date(domain.expiration_date).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3">
                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${
                         domain.monitoring_status === 'UP' ? 'text-emerald-400 bg-emerald-400/10' :
                         domain.monitoring_status === 'SLOW' ? 'text-amber-400 bg-amber-400/10' :
@@ -214,22 +271,76 @@ export default function Domains() {
                         {domain.monitoring_status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-white/50 text-xs">
-                      <div className="flex flex-col gap-0.5">
-                        {domain.ns.split('\n').map((ns, i) => (
-                          <span key={i}>{ns}</span>
-                        ))}
-                      </div>
+                    {/* SSL expiry */}
+                    <td className="px-4 py-3 text-xs">
+                      {(() => {
+                        const dl = daysLeft(domain.ssl_valid_till);
+                        if (dl === null) return <span className="text-white/40">—</span>;
+                        const cls = dl <= 7 ? 'text-rose-400' : dl <= 21 ? 'text-amber-400' : 'text-white/70';
+                        return (
+                          <span className={cls} title={`${dl} дн.`}>{fmtDate(domain.ssl_valid_till)}</span>
+                        );
+                      })()}
                     </td>
-                    <td className="px-4 py-3">
-                      {domain.keitaro_name ? (
-                        <div className="flex flex-col">
-                          <span className="text-sm">{domain.keitaro_name}</span>
-                          <span className="text-xs text-white/40 font-mono">{domain.keitaro_ip}</span>
+                    {/* Domain registry expiry */}
+                    <td className="px-4 py-3 text-xs">
+                      {(() => {
+                        const dl = daysLeft(domain.expiration_date);
+                        if (dl === null) return <span className="text-white/40">—</span>;
+                        const cls = dl <= 14 ? 'text-rose-400' : dl <= 30 ? 'text-amber-400' : 'text-white/70';
+                        return (
+                          <span className={cls} title={`${dl} дн.`}>{fmtDate(domain.expiration_date)}</span>
+                        );
+                      })()}
+                    </td>
+                    {/* Real origin IP (from Cloudflare) vs Keitaro */}
+                    <td className="px-4 py-3 text-xs">
+                      {domain.resolved_ip ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="font-mono text-white/70 flex items-center gap-1">
+                            {domain.resolved_ip}
+                            {domain.proxied ? <Cloud className="w-3 h-3 text-orange-400" /> : null}
+                          </span>
+                          {domain.keitaro_ip && (
+                            domain.resolved_ip === domain.keitaro_ip ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-400">
+                                <ShieldCheck className="w-3 h-3" /> на Keitaro
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-400">
+                                <ShieldAlert className="w-3 h-3" /> не Keitaro
+                              </span>
+                            )
+                          )}
                         </div>
                       ) : (
-                        <span className="text-white/40 text-xs">—</span>
+                        <span className="text-white/40">—</span>
                       )}
+                    </td>
+                    {/* Keitaro tracker + membership */}
+                    <td className="px-4 py-3 text-xs">
+                      {domain.keitaro_name ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm text-white/80">{domain.keitaro_name}</span>
+                          <span className="font-mono text-white/40">{domain.keitaro_ip}</span>
+                        </div>
+                      ) : (
+                        <span className="text-white/40">—</span>
+                      )}
+                      {domain.keitaro_registered === true ? (
+                        <span className="mt-1 inline-flex items-center gap-1 text-emerald-400">
+                          <ShieldCheck className="w-3 h-3" /> в трекере
+                        </span>
+                      ) : domain.keitaro_registered === false ? (
+                        <span className="mt-1 inline-flex items-center gap-1 text-white/40">нет в трекере</span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-white/50 text-xs">
+                      <div className="flex flex-col gap-0.5">
+                        {domain.ns ? domain.ns.split('\n').filter(Boolean).map((ns, i) => (
+                          <span key={i}>{ns}</span>
+                        )) : <span className="text-white/40">—</span>}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -251,11 +362,14 @@ export default function Domains() {
                               sideOffset={5}
                               align="end"
                             >
-                              <DropdownMenu.Item className="flex items-center gap-2 px-3 py-2 outline-none cursor-pointer rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors">
+                              <DropdownMenu.Item onClick={() => window.open(`https://${domain.domain_name}`, '_blank')} className="flex items-center gap-2 px-3 py-2 outline-none cursor-pointer rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors">
                                 <ExternalLink className="w-4 h-4" /> Открыть сайт
                               </DropdownMenu.Item>
-                              <DropdownMenu.Item className="flex items-center gap-2 px-3 py-2 outline-none cursor-pointer rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors">
-                                <Settings className="w-4 h-4" /> Настройки DNS
+                              <DropdownMenu.Item onClick={() => pointToKeitaro([domain.id])} className="flex items-center gap-2 px-3 py-2 outline-none cursor-pointer rounded hover:bg-white/10 text-emerald-400 transition-colors">
+                                <Target className="w-4 h-4" /> Направить на Keitaro
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item onClick={() => domain.id && monitorCheck(domain.id)} className="flex items-center gap-2 px-3 py-2 outline-none cursor-pointer rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors">
+                                <Settings className="w-4 h-4" /> Проверить сейчас
                               </DropdownMenu.Item>
                               <DropdownMenu.Separator className="h-px bg-white/10 my-1" />
                               <DropdownMenu.Item onClick={() => setDeleteModal({ isOpen: true, ids: [domain.id] })} className="flex items-center gap-2 px-3 py-2 outline-none cursor-pointer rounded hover:bg-rose-500/20 text-rose-400 transition-colors">

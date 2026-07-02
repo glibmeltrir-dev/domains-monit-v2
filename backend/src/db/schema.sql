@@ -108,3 +108,9 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Columns added after the initial release (idempotent for existing databases).
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS resolved_ip        TEXT;      -- origin IP (from Cloudflare A record)
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS proxied            BOOLEAN;   -- Cloudflare orange-cloud on/off
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS keitaro_registered BOOLEAN;   -- present in the Keitaro tracker
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS synced_at          TIMESTAMPTZ;

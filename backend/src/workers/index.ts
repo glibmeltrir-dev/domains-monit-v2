@@ -4,7 +4,8 @@ import type { CheckDomainJob, ProvisionDomainJob } from "../queue/index.ts";
 import { config } from "../config.ts";
 import { logger } from "../logger.ts";
 import { checkDomain } from "../services/monitor.ts";
-import { provisionDomain } from "../services/provision.ts";
+import { provisionDomain, repointDomain } from "../services/provision.ts";
+import { syncAll } from "../services/sync.ts";
 
 const monitorWorker = new Worker<CheckDomainJob>(
   QUEUE_NAMES.monitor,
@@ -17,9 +18,18 @@ const monitorWorker = new Worker<CheckDomainJob>(
 const provisionWorker = new Worker<ProvisionDomainJob>(
   QUEUE_NAMES.provision,
   async (job) => {
+    const mode = job.data.mode ?? "full";
+    if (mode === "sync") {
+      await syncAll();
+      return;
+    }
+    if (mode === "repoint") {
+      await repointDomain(job.data.domainId);
+      return;
+    }
     await provisionDomain(job.data.domainId, {
-      register: job.data.register,
-      cfTemplateId: job.data.cfTemplateId,
+      register: !!job.data.register,
+      cfTemplateId: job.data.cfTemplateId ?? null,
       years: job.data.years,
     });
   },

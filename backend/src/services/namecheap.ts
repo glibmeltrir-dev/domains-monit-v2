@@ -31,6 +31,17 @@ export interface ContactProfile {
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 
+// Namecheap returns dates as MM/DD/YYYY.
+function parseNcDate(s: string): Date | null {
+  const m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const d = new Date(Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export class NamecheapClient {
   private apiUrl: string;
 
@@ -81,6 +92,34 @@ export class NamecheapClient {
         ? Number(d["@_PremiumRegistrationPrice"])
         : undefined,
     }));
+  }
+
+  // Full account domain list with registry expiry dates (paginated). This is
+  // the reliable source of expiry for our TLDs where RDAP is spotty.
+  async listDomains(): Promise<Array<{ domain: string; expires: Date | null }>> {
+    const out: Array<{ domain: string; expires: Date | null }> = [];
+    const pageSize = 100;
+    let page = 1;
+    for (;;) {
+      const cmd = await this.call("namecheap.domains.getList", {
+        Page: page,
+        PageSize: pageSize,
+      });
+      const raw = cmd?.DomainGetListResult?.Domain;
+      const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      for (const d of list) {
+        const name = String(d["@_Name"] ?? "").toLowerCase();
+        if (!name) continue;
+        out.push({
+          domain: name,
+          expires: d["@_Expires"] ? parseNcDate(String(d["@_Expires"])) : null,
+        });
+      }
+      const total = Number(cmd?.Paging?.TotalItems ?? list.length);
+      if (!list.length || page * pageSize >= total) break;
+      page++;
+    }
+    return out;
   }
 
   async getBalance(): Promise<number> {

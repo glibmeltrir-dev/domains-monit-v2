@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import tls from "node:tls";
+import { promises as dns } from "node:dns";
 import axios from "axios";
 
 export interface HttpCheckResult {
@@ -124,6 +125,17 @@ export async function getDomainExpiry(targetUrl: string): Promise<Date | null> {
     return null;
   }
   return null;
+}
+
+// Delegated name servers as seen at the registry (best effort). Useful to
+// confirm a domain is actually pointing at Cloudflare.
+export async function resolveNsRecords(hostname: string): Promise<string[]> {
+  try {
+    const ns = await dns.resolveNs(hostname);
+    return ns.map((n) => n.toLowerCase().replace(/\.$/, "")).sort();
+  } catch {
+    return [];
+  }
 }
 
 export function normalizeUrl(input: string): string {

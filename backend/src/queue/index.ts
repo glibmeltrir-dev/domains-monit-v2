@@ -7,9 +7,13 @@ export interface CheckDomainJob {
 
 export interface ProvisionDomainJob {
   domainId: number;
-  register: boolean;
-  cfTemplateId: number | null;
+  register?: boolean;
+  cfTemplateId?: number | null;
   years?: number;
+  // "full"    -> buy/connect end-to-end (default)
+  // "repoint" -> point existing domain to Keitaro IP + register in tracker
+  // "sync"    -> reconcile all domains with providers (domainId ignored)
+  mode?: "full" | "repoint" | "sync";
 }
 
 // Queue for individual domain health checks.

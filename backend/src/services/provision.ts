@@ -49,6 +49,54 @@ async function loadCfTemplate(id: number | null): Promise<CloudflareTemplate> {
   return { proxy_on: true, ssl_mode: "Full", bot_fight_mode: false, https_redirect: true };
 }
 
+// Point an already-existing domain at the Keitaro IP via Cloudflare and make
+// sure it is registered in the Keitaro tracker. Unlike provisionDomain this
+// does NOT touch provision_status / enabled, so a repoint never removes a live
+// domain from monitoring — it only updates DNS + tracker membership.
+export async function repointDomain(domainId: number): Promise<void> {
+  const ctx = await fetchDomainContext(domainId);
+  if (!ctx) throw new Error(`Domain ${domainId} not found`);
+  const domain = ctx.domain_name as string;
+  if (!ctx.cf_token) throw new Error("No Cloudflare account attached to domain");
+
+  const cf = new CloudflareClient(ctx.cf_token, ctx.cf_account_id ?? undefined);
+  const tpl = await loadCfTemplate(null);
+  const targetIp = ctx.keitaro_ip || config.keitaroDefaultIp;
+
+  const zone = await cf.connectDomain(domain, tpl, targetIp);
+
+  let keitaroOk = false;
+  if (ctx.keitaro_url && ctx.keitaro_key) {
+    try {
+      await new KeitaroClient(ctx.keitaro_url, ctx.keitaro_key).addDomain(domain);
+      keitaroOk = true;
+    } catch (err: any) {
+      const msg = String(err?.message ?? "");
+      // A domain that already exists in Keitaro is fine — treat as success.
+      if (/exist|already|taken|duplicate/i.test(msg)) keitaroOk = true;
+      else logger.warn({ err: msg, domain }, "Keitaro addDomain failed (non-fatal)");
+    }
+  }
+
+  await query(
+    `UPDATE domains
+       SET cloudflare_zone_id   = $1,
+           ns                   = $2,
+           resolved_ip          = $3,
+           proxied              = $4,
+           keitaro_registered   = CASE WHEN $5 THEN TRUE ELSE keitaro_registered END,
+           synced_at            = now()
+     WHERE id = $6`,
+    [zone.zoneId, zone.nameServers.join("\n"), targetIp, tpl.proxy_on, keitaroOk, domainId]
+  );
+
+  await query("INSERT INTO incidents (domain_id, type, message) VALUES ($1, 'provision', $2)", [
+    domainId,
+    `🎯 ${domain} направлен на Keitaro (${targetIp})`,
+  ]);
+  await sendTG(`🎯 <b>KEITARO</b> ${domain} → ${targetIp}`, "purchase");
+}
+
 // Buy (optional) + connect a single domain end-to-end.
 export async function provisionDomain(
   domainId: number,

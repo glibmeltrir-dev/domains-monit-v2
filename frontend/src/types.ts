@@ -10,11 +10,17 @@ export interface Domain {
   keitaro_id: number;
   ns: string;
   ssl: string;
+  ssl_valid_till?: string | null;
   http_status: string;
   latency_ms: number;
   last_check: string;
   monitoring_status: string;
-  
+
+  resolved_ip?: string | null;
+  proxied?: boolean | null;
+  keitaro_registered?: boolean | null;
+  synced_at?: string | null;
+
   keitaro_name?: string;
   keitaro_ip?: string;
   namecheap_name?: string;

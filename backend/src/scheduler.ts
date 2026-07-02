@@ -2,6 +2,7 @@ import { query } from "./db/pool.ts";
 import { monitorQueue } from "./queue/index.ts";
 import { config } from "./config.ts";
 import { logger } from "./logger.ts";
+import { syncAll } from "./services/sync.ts";
 
 // Find domains whose individual check interval has elapsed and enqueue a check
 // for each. Using a de-duplicated jobId prevents piling up duplicate checks if
@@ -43,6 +44,19 @@ async function tick() {
   }
 }
 
+// Periodically reconcile domains with Cloudflare/Namecheap/Keitaro (origin IP,
+// NS, expiry, tracker membership). Kept well apart from the fast health-check
+// loop since it hits external APIs in bulk.
+const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+async function syncTick() {
+  try {
+    const summary = await syncAll();
+    logger.info(summary, "scheduled provider sync");
+  } catch (err) {
+    logger.error({ err }, "scheduled provider sync failed");
+  }
+}
+
 logger.info(
   { intervalSec: config.monitor.schedulerIntervalSec },
   "Scheduler started"
@@ -50,8 +64,14 @@ logger.info(
 void tick();
 const timer = setInterval(tick, config.monitor.schedulerIntervalSec * 1000);
 
+// First reconcile shortly after boot, then on the long interval.
+const syncBoot = setTimeout(syncTick, 15_000);
+const syncTimer = setInterval(syncTick, SYNC_INTERVAL_MS);
+
 function shutdown() {
   clearInterval(timer);
+  clearTimeout(syncBoot);
+  clearInterval(syncTimer);
   process.exit(0);
 }
 process.on("SIGTERM", shutdown);

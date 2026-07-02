@@ -13,6 +13,13 @@ export interface ZoneResult {
   nameServers: string[];
 }
 
+export interface ZoneInfo {
+  id: string;
+  name: string;
+  nameServers: string[];
+  status: string;
+}
+
 function mapSslMode(mode: string): "off" | "flexible" | "full" | "strict" {
   switch ((mode || "").toLowerCase()) {
     case "off":
@@ -75,6 +82,47 @@ export class CloudflareClient {
     });
     const zone = this.unwrap<{ id: string; name_servers: string[] }>(data);
     return { zoneId: zone.id, nameServers: zone.name_servers ?? [] };
+  }
+
+  // List every zone on the account (paginated). Used by the reconcile/sync job
+  // to match our domains to their Cloudflare zone in a single pass.
+  async listZones(): Promise<ZoneInfo[]> {
+    const out: ZoneInfo[] = [];
+    let page = 1;
+    for (;;) {
+      const { data } = await this.http.get("/zones", {
+        params: { per_page: 50, page },
+      });
+      const result = this.unwrap<
+        Array<{ id: string; name: string; name_servers?: string[]; status: string }>
+      >(data);
+      for (const z of result) {
+        out.push({
+          id: z.id,
+          name: z.name.toLowerCase(),
+          nameServers: z.name_servers ?? [],
+          status: z.status,
+        });
+      }
+      const info = (data as { result_info?: { total_pages?: number } }).result_info;
+      if (!result.length || !info || page >= (info.total_pages ?? 1)) break;
+      page++;
+    }
+    return out;
+  }
+
+  // Read the origin A record for a zone (content = real target IP, plus proxy
+  // state). This is the accurate way to tell where a proxied domain points.
+  async getARecord(
+    zoneId: string,
+    name: string
+  ): Promise<{ content: string; proxied: boolean } | null> {
+    const { data } = await this.http.get(`/zones/${zoneId}/dns_records`, {
+      params: { type: "A", name },
+    });
+    const records = this.unwrap<Array<{ content: string; proxied: boolean }>>(data);
+    if (!records.length) return null;
+    return { content: records[0].content, proxied: !!records[0].proxied };
   }
 
   async upsertDnsRecord(

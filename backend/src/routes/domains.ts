@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { query } from "../db/pool.ts";
-import { monitorQueue } from "../queue/index.ts";
+import { monitorQueue, provisionQueue } from "../queue/index.ts";
 import { normalizeUrl } from "../services/checkers.ts";
 
 export const domainsRouter = Router();
@@ -57,6 +57,61 @@ domainsRouter.post("/import", async (req, res) => {
       if (rowCount) created++;
     }
     res.json({ created });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reconcile every domain with Cloudflare / Namecheap / Keitaro (async job):
+// origin IP, NS, proxy state, registry expiry and tracker membership.
+domainsRouter.post("/sync", async (_req, res) => {
+  try {
+    await provisionQueue.add(
+      "sync",
+      { domainId: 0, mode: "sync" },
+      { jobId: `sync-${Date.now()}` }
+    );
+    res.json({ queued: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Point one or many domains at the Keitaro IP (via Cloudflare) and register
+// them in the tracker. Domains without a Cloudflare/Keitaro account attached
+// fall back to the first active account of each type.
+domainsRouter.post("/point-to-keitaro", async (req, res) => {
+  try {
+    const { ids }: { ids: number[] } = req.body ?? {};
+    if (!Array.isArray(ids) || !ids.length) {
+      return res.status(400).json({ error: "ids[] required" });
+    }
+
+    const { rows: cf } = await query<{ id: number }>(
+      "SELECT id FROM cloudflare_accounts WHERE status = 'ACTIVE' ORDER BY id LIMIT 1"
+    );
+    if (!cf[0]) return res.status(400).json({ error: "No Cloudflare account configured" });
+    const { rows: k } = await query<{ id: number }>(
+      "SELECT id FROM keitaro_trackers WHERE status = 'ACTIVE' ORDER BY id LIMIT 1"
+    );
+    const cfId = cf[0].id;
+    const kId = k[0]?.id ?? null;
+
+    for (const id of ids) {
+      await query(
+        `UPDATE domains
+           SET cloudflare_account_id = COALESCE(cloudflare_account_id, $1),
+               keitaro_id            = COALESCE(keitaro_id, $2)
+         WHERE id = $3`,
+        [cfId, kId, id]
+      );
+      await provisionQueue.add(
+        "repoint",
+        { domainId: id, mode: "repoint" },
+        { jobId: `repoint-${id}-${Date.now()}` }
+      );
+    }
+    res.json({ queued: true, count: ids.length });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
