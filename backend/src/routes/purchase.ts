@@ -89,7 +89,7 @@ purchaseRouter.post("/buy", async (req, res) => {
       await provisionQueue.add(
         "provision",
         { domainId, register: !!register, cfTemplateId: cf_template_id, years },
-        { jobId: `provision:${domainId}:${Date.now()}` }
+        { jobId: `provision-${domainId}-${Date.now()}` }
       );
       queued.push(name);
     }

@@ -69,7 +69,7 @@ domainsRouter.post("/:id/check", async (req, res) => {
     await monitorQueue.add(
       "check",
       { domainId: id },
-      { jobId: `manual:${id}:${Date.now()}` }
+      { jobId: `manual-${id}-${Date.now()}` }
     );
     res.json({ queued: true });
   } catch (e: any) {

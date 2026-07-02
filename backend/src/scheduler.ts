@@ -5,7 +5,7 @@ import { logger } from "./logger.ts";
 
 // Find domains whose individual check interval has elapsed and enqueue a check
 // for each. Using a de-duplicated jobId prevents piling up duplicate checks if
-// a worker is slow.
+// a worker is slow. NOTE: BullMQ forbids ":" in custom job ids — use "-".
 async function enqueueDueChecks(): Promise<number> {
   const { rows } = await query<{ id: number }>(
     `SELECT d.id
@@ -28,7 +28,7 @@ async function enqueueDueChecks(): Promise<number> {
     rows.map((r) => ({
       name: "check",
       data: { domainId: r.id },
-      opts: { jobId: `check:${r.id}` },
+      opts: { jobId: `check-${r.id}` },
     }))
   );
   return rows.length;
