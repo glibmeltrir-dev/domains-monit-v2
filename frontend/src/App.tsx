@@ -9,6 +9,7 @@ import Domains from './pages/Domains.tsx';
 import Integrations from './pages/Integrations.tsx';
 import Templates from './pages/Templates.tsx';
 import Purchase from './pages/Purchase.tsx';
+import Replace from './pages/Replace.tsx';
 import Settings from './pages/Settings.tsx';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/domains" replace />} />
             <Route path="/domains" element={<Domains />} />
             <Route path="/purchase" element={<Purchase />} />
+            <Route path="/replace" element={<Replace />} />
             <Route path="/integrations" element={<Integrations />} />
             <Route path="/templates" element={<Templates />} />
             <Route path="/settings" element={<Settings />} />

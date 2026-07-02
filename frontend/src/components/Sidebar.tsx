@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Globe, PlusCircle, Network, LayoutTemplate, Settings } from 'lucide-react';
+import { Globe, PlusCircle, RefreshCcw, Network, LayoutTemplate, Settings } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function Sidebar() {
@@ -8,6 +8,7 @@ export default function Sidebar() {
   const links = [
     { name: 'Домены', icon: Globe, path: '/domains' },
     { name: 'Покупка', icon: PlusCircle, path: '/purchase' },
+    { name: 'Замена', icon: RefreshCcw, path: '/replace' },
     { name: 'Интеграции', icon: Network, path: '/integrations' },
     { name: 'Шаблоны', icon: LayoutTemplate, path: '/templates' },
     { name: 'Настройки', icon: Settings, path: '/settings' },

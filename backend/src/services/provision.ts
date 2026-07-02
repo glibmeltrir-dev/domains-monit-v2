@@ -22,7 +22,7 @@ async function getContactProfile(): Promise<ContactProfile | null> {
   }
 }
 
-async function fetchDomainContext(domainId: number) {
+export async function fetchDomainContext(domainId: number) {
   const { rows } = await query<any>(
     `SELECT d.*, 
             nc.api_user, nc.api_key, nc.username AS nc_username, nc.client_ip,
@@ -97,6 +97,24 @@ export async function repointDomain(domainId: number): Promise<void> {
     `🎯 ${domain} направлен на Keitaro (${targetIp})`,
   ]);
   await sendTG(`🎯 <b>KEITARO</b> ${domain} → ${targetIp}`, "purchase");
+}
+
+// Best-effort removal of a domain from its Keitaro tracker before the DB row is
+// deleted. Looks up the tracker creds, finds the Keitaro domain by name and
+// deletes it. Missing tracker / missing domain is not fatal.
+export async function removeFromKeitaro(domainId: number): Promise<void> {
+  const ctx = await fetchDomainContext(domainId);
+  if (!ctx || !ctx.keitaro_url || !ctx.keitaro_key) return;
+  const domain = String(ctx.domain_name || "").toLowerCase();
+  if (!domain) return;
+  try {
+    const kc = new KeitaroClient(ctx.keitaro_url, ctx.keitaro_key);
+    const list = await kc.listDomains();
+    const match = list.find((d) => d.name?.toLowerCase() === domain);
+    if (match) await kc.deleteDomain(match.id);
+  } catch (err: any) {
+    logger.warn({ err: err?.message, domain }, "Keitaro deleteDomain failed (non-fatal)");
+  }
 }
 
 // Buy (optional) + connect a single domain end-to-end.

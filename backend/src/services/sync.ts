@@ -136,10 +136,22 @@ export async function syncAll(): Promise<SyncSummary> {
 
     if (trackers.length) {
       const registered = new Set<string>();
+      // Имя домена (lower) -> group_id, и карта id группы -> имя (по всем трекерам).
+      const domainGroup = new Map<string, number | null>();
+      const groupNameById = new Map<number, string>();
       for (const t of trackers) {
         try {
-          const list = await new KeitaroClient(t.url, t.api_key).listDomains();
-          for (const d of list) registered.add(String(d.name).toLowerCase());
+          const client = new KeitaroClient(t.url, t.api_key);
+          const [list, groups] = await Promise.all([
+            client.listDomains(),
+            client.listGroups().catch(() => []),
+          ]);
+          for (const g of groups) groupNameById.set(g.id, g.name);
+          for (const d of list) {
+            const name = String(d.name).toLowerCase();
+            registered.add(name);
+            domainGroup.set(name, d.group_id ?? null);
+          }
         } catch (e: any) {
           summary.errors.push(`Keitaro#${t.id}: ${e.message}`);
         }
@@ -149,6 +161,29 @@ export async function syncAll(): Promise<SyncSummary> {
         "UPDATE domains SET keitaro_registered = (lower(domain_name) = ANY($1::text[]))",
         [arr]
       );
+
+      // Обновляем группу Keitaro для наших доменов одним запросом (unnest).
+      const ids: number[] = [];
+      const gids: (number | null)[] = [];
+      const gnames: (string | null)[] = [];
+      for (const d of domains) {
+        const gid = domainGroup.get(d.domain_name.toLowerCase()) ?? null;
+        ids.push(d.id);
+        gids.push(gid);
+        gnames.push(gid != null ? groupNameById.get(gid) ?? null : null);
+      }
+      if (ids.length) {
+        await query(
+          `UPDATE domains AS x
+             SET keitaro_group_id   = v.gid,
+                 keitaro_group_name = v.gname
+           FROM (SELECT unnest($1::int[]) AS id,
+                        unnest($2::int[]) AS gid,
+                        unnest($3::text[]) AS gname) v
+           WHERE x.id = v.id`,
+          [ids, gids, gnames]
+        );
+      }
       summary.keitaroRegistered = arr.length;
     }
   } catch (e: any) {

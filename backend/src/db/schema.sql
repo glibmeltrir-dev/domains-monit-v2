@@ -114,3 +114,5 @@ ALTER TABLE domains ADD COLUMN IF NOT EXISTS resolved_ip        TEXT;      -- or
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS proxied            BOOLEAN;   -- Cloudflare orange-cloud on/off
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS keitaro_registered BOOLEAN;   -- present in the Keitaro tracker
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS synced_at          TIMESTAMPTZ;
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS keitaro_group_id   INTEGER;   -- Keitaro domain group id (from sync)
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS keitaro_group_name TEXT;      -- Keitaro domain group name (from sync)

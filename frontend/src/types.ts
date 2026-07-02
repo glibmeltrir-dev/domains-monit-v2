@@ -19,6 +19,8 @@ export interface Domain {
   resolved_ip?: string | null;
   proxied?: boolean | null;
   keitaro_registered?: boolean | null;
+  keitaro_group_id?: number | null;
+  keitaro_group_name?: string | null;
   synced_at?: string | null;
 
   keitaro_name?: string;
