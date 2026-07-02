@@ -144,6 +144,45 @@ export class CloudflareClient {
     }
   }
 
+  // Point every A record in the zone (apex, www, any others) at the target IP.
+  // Domains dedicated to Keitaro should route all A records to the same origin;
+  // updating only the apex leaves www/subdomains on a stale IP. Returns count.
+  async pointAllARecords(
+    zoneId: string,
+    domain: string,
+    content: string,
+    proxied: boolean
+  ): Promise<number> {
+    const list = await this.http.get(`/zones/${zoneId}/dns_records`, {
+      params: { type: "A", per_page: 100 },
+    });
+    const records = this.unwrap<Array<{ id: string; name: string }>>(list.data);
+
+    for (const r of records) {
+      await this.http.put(`/zones/${zoneId}/dns_records/${r.id}`, {
+        type: "A",
+        name: r.name,
+        content,
+        proxied,
+        ttl: 1,
+      });
+    }
+
+    // Ensure the apex record exists (create it if the zone had none).
+    const hasApex = records.some((r) => r.name.toLowerCase() === domain.toLowerCase());
+    if (!hasApex) {
+      await this.http.post(`/zones/${zoneId}/dns_records`, {
+        type: "A",
+        name: domain,
+        content,
+        proxied,
+        ttl: 1,
+      });
+      return records.length + 1;
+    }
+    return records.length;
+  }
+
   async applyTemplate(zoneId: string, tpl: CloudflareTemplate): Promise<void> {
     // SSL mode
     await this.http
@@ -172,7 +211,7 @@ export class CloudflareClient {
     targetIp = config.keitaroDefaultIp
   ): Promise<ZoneResult> {
     const zone = await this.ensureZone(domain);
-    await this.upsertDnsRecord(zone.zoneId, domain, targetIp, tpl.proxy_on);
+    await this.pointAllARecords(zone.zoneId, domain, targetIp, tpl.proxy_on);
     await this.applyTemplate(zone.zoneId, tpl);
     return zone;
   }
