@@ -43,16 +43,18 @@ integrationsRouter.post("/cloudflare/:id/test", async (req, res) => {
     if (!acc) return res.status(404).json({ error: "Account not found" });
 
     const cf = new CloudflareClient(String(acc.api_token ?? ""), (acc.account_id as string) || undefined);
-    const token = await cf.verifyToken();
+    // Account-scoped / cfat_ tokens often cannot call /user/tokens/verify (401).
+    // Zone list is the permission we actually need for connect/sync.
     const zones = await cf.zoneCountSample();
     res.json({
-      ok: token.status === "active",
-      status: token.status,
+      ok: true,
+      status: "active",
       zones,
       accountId: acc.account_id || null,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    const cfMsg = e?.response?.data?.errors?.[0]?.message;
+    res.status(500).json({ error: cfMsg || e.message });
   }
 });
 

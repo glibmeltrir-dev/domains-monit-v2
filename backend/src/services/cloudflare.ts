@@ -56,11 +56,6 @@ export class CloudflareClient {
     return data.result;
   }
 
-  async verifyToken(): Promise<{ id: string; status: string }> {
-    const { data } = await this.http.get("/user/tokens/verify");
-    return this.unwrap<{ id: string; status: string }>(data);
-  }
-
   async zoneCountSample(): Promise<number> {
     const { data } = await this.http.get("/zones", { params: { per_page: 1 } });
     this.unwrap(data);
