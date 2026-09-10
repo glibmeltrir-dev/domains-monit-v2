@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { query } from "../db/pool.ts";
 import { NamecheapClient } from "../services/namecheap.ts";
+import { CloudflareClient } from "../services/cloudflare.ts";
 import { redactSecretsForApi, revealSecrets } from "../services/secrets.ts";
 
 export const integrationsRouter = Router();
@@ -27,6 +28,29 @@ integrationsRouter.post("/namecheap/:id/refresh-balance", async (req, res) => {
       acc.id,
     ]);
     res.json({ balance });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+integrationsRouter.post("/cloudflare/:id/test", async (req, res) => {
+  try {
+    const { rows } = await query<any>(
+      "SELECT * FROM cloudflare_accounts WHERE id = $1",
+      [req.params.id]
+    );
+    const acc = revealSecrets(rows[0]);
+    if (!acc) return res.status(404).json({ error: "Account not found" });
+
+    const cf = new CloudflareClient(String(acc.api_token ?? ""), (acc.account_id as string) || undefined);
+    const token = await cf.verifyToken();
+    const zones = await cf.zoneCountSample();
+    res.json({
+      ok: token.status === "active",
+      status: token.status,
+      zones,
+      accountId: acc.account_id || null,
+    });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

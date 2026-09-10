@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NamecheapAccount, CloudflareAccount, KeitaroTracker } from '../types.ts';
-import { Plus, Edit2, Trash2, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 export default function Integrations() {
   const [data, setData] = useState<{
@@ -17,6 +17,7 @@ export default function Integrations() {
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; table: string; id: number | null }>({ isOpen: false, table: '', id: null });
 
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
+  const [cfTest, setCfTest] = useState<{ id: number; ok: boolean; text: string } | null>(null);
 
   const fetchData = () => {
     fetch('/api/integrations')
@@ -44,6 +45,25 @@ export default function Integrations() {
       /* ignore — keep stored balance */
     } finally {
       if (!silent) setRefreshingId(null);
+    }
+  };
+
+  const testCloudflare = async (id: number) => {
+    setRefreshingId(id);
+    setCfTest(null);
+    try {
+      const res = await fetch(`/api/integrations/cloudflare/${id}/test`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Ошибка проверки');
+      setCfTest({
+        id,
+        ok: !!j.ok,
+        text: j.ok ? `Токен активен, зон: ${j.zones}` : `Статус: ${j.status || 'неактивен'}`,
+      });
+    } catch (e: any) {
+      setCfTest({ id, ok: false, text: e.message || 'Ошибка проверки' });
+    } finally {
+      setRefreshingId(null);
     }
   };
 
@@ -204,6 +224,9 @@ export default function Integrations() {
               {data.cloudflare.map(acc => (
                 <div key={acc.id} className="bg-white/5 border border-white/10 rounded-xl p-4 group/card relative">
                   <div className="absolute top-2 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity flex items-center gap-1">
+                    <button onClick={() => testCloudflare(acc.id)} title="Проверить токен" className="p-1.5 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors">
+                      <CheckCircle2 className={`w-3.5 h-3.5 ${refreshingId === acc.id ? 'animate-pulse' : ''}`} />
+                    </button>
                     <button onClick={() => openEdit('cloudflare', acc)} className="p-1.5 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -212,9 +235,12 @@ export default function Integrations() {
                     </button>
                   </div>
                   <div className="font-medium">{acc.name}</div>
-                  <div className="text-sm text-white/50 mt-1">{acc.email || 'Нет Email'}</div>
-                  <div className="mt-4">
+                  <div className="text-sm text-white/50 mt-1">{acc.account_id || acc.email || 'Cloudflare API Token'}</div>
+                  <div className="mt-4 flex justify-between items-center gap-2">
                     <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded">{acc.status}</span>
+                    {cfTest?.id === acc.id && (
+                      <span className={`text-xs ${cfTest.ok ? 'text-emerald-400' : 'text-rose-400'}`}>{cfTest.text}</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -290,8 +316,9 @@ export default function Integrations() {
                 <>
                   {renderInput('Название (алиас)', 'name')}
                   {renderSelect('Группа', 'group_id', data?.groups || [])}
-                  {renderInput('Email (опционально)', 'email')}
                   {renderInput('API Token', 'api_token', 'password')}
+                  {renderInput('Account ID', 'account_id')}
+                  {renderInput('Email (опционально)', 'email')}
                 </>
               )}
 

@@ -56,6 +56,18 @@ export class CloudflareClient {
     return data.result;
   }
 
+  async verifyToken(): Promise<{ id: string; status: string }> {
+    const { data } = await this.http.get("/user/tokens/verify");
+    return this.unwrap<{ id: string; status: string }>(data);
+  }
+
+  async zoneCountSample(): Promise<number> {
+    const { data } = await this.http.get("/zones", { params: { per_page: 1 } });
+    this.unwrap(data);
+    const info = (data as { result_info?: { total_count?: number } }).result_info;
+    return info?.total_count ?? 0;
+  }
+
   async resolveAccountId(): Promise<string> {
     if (this.accountId) return this.accountId;
     const { data } = await this.http.get("/accounts", { params: { per_page: 1 } });

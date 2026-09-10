@@ -46,6 +46,7 @@ export interface CloudflareAccount {
   name: string;
   api_token: string;
   email: string;
+  account_id?: string | null;
   status: string;
   group_id: number | null;
 }
