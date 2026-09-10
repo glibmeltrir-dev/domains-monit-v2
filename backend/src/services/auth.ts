@@ -8,6 +8,7 @@ const scrypt = promisify(scryptCb);
 
 const COOKIE = "sid";
 const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/;
+const EMAIL_RE = /^[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 export interface AuthUser {
   id: number;
@@ -104,10 +105,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 export function validateUsername(raw: string): string {
   const username = String(raw || "").trim();
-  if (!USERNAME_RE.test(username)) {
-    throw new AuthError("Логин: 3–32 символа, латиница, цифры, . _ -");
-  }
-  return username;
+  if (USERNAME_RE.test(username)) return username;
+  if (username.length <= 64 && EMAIL_RE.test(username)) return username.toLowerCase();
+  throw new AuthError("Логин: 3–32 символа (латиница, цифры, . _ -) или email");
 }
 
 export function validatePassword(raw: string): string {

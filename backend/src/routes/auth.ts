@@ -8,6 +8,8 @@ import {
   destroySession,
   setSessionCookie,
   userCount,
+  validatePassword,
+  validateUsername,
 } from "../services/auth.ts";
 import { clientKey, rateLimitAllow } from "../middleware/rateLimit.ts";
 
@@ -27,11 +29,16 @@ authRouter.get("/status", async (req, res) => {
 
 authRouter.post("/register", async (req, res) => {
   try {
+    const { username, password } = req.body ?? {};
+    // Validate first so a rejected login does not burn the hourly quota.
+    const userName = String(username ?? "");
+    const pass = String(password ?? "");
+    validateUsername(userName);
+    validatePassword(pass);
     if (!rateLimitAllow(`reg:${clientKey(req)}`, 5, 60 * 60 * 1000)) {
       return res.status(429).json({ error: "Слишком много попыток, подождите" });
     }
-    const { username, password } = req.body ?? {};
-    const user = await createFirstAdmin(String(username ?? ""), String(password ?? ""));
+    const user = await createFirstAdmin(userName, pass);
     const sid = await createSession(user.id, req);
     setSessionCookie(res, sid);
     res.json({ user });

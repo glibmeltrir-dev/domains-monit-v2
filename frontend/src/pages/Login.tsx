@@ -53,7 +53,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-xs text-white/50 mb-1.5">Логин</label>
+            <label className="block text-xs text-white/50 mb-1.5">Логин или email</label>
             <input
               autoComplete="username"
               autoFocus
