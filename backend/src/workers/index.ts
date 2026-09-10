@@ -1,11 +1,13 @@
 import { Worker } from "bullmq";
 import { connection, QUEUE_NAMES } from "../queue/connection.ts";
 import type { CheckDomainJob, ProvisionDomainJob } from "../queue/index.ts";
-import { config } from "../config.ts";
+import { assertSecretsConfigured, config } from "../config.ts";
 import { logger } from "../logger.ts";
 import { checkDomain } from "../services/monitor.ts";
 import { provisionDomain, repointDomain } from "../services/provision.ts";
 import { syncAll } from "../services/sync.ts";
+
+assertSecretsConfigured();
 
 const monitorWorker = new Worker<CheckDomainJob>(
   QUEUE_NAMES.monitor,

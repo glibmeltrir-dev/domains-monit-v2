@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { query } from "../db/pool.ts";
 import { getSetting, setSetting, sendTG } from "../services/telegram.ts";
+import { isBlankSecret, SETTINGS_SECRET_KEYS } from "../services/secrets.ts";
 
 export const settingsRouter = Router();
 
@@ -20,9 +21,19 @@ settingsRouter.get("/", async (_req, res) => {
     const { rows } = await query<{ key: string; value: string | null }>(
       "SELECT key, value FROM settings"
     );
-    const out: Record<string, string | null> = {};
-    for (const k of KEYS) out[k] = null;
-    for (const r of rows) out[r.key] = r.value;
+    const out: Record<string, string | boolean | null> = {};
+    for (const k of KEYS) {
+      out[k] = SETTINGS_SECRET_KEYS.has(k) ? "" : null;
+      if (SETTINGS_SECRET_KEYS.has(k)) out[`${k}_set`] = false;
+    }
+    for (const r of rows) {
+      if (SETTINGS_SECRET_KEYS.has(r.key)) {
+        out[r.key] = "";
+        out[`${r.key}_set`] = Boolean(r.value);
+      } else {
+        out[r.key] = r.value;
+      }
+    }
     res.json(out);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -33,7 +44,9 @@ settingsRouter.post("/", async (req, res) => {
   try {
     const body = req.body ?? {};
     for (const key of KEYS) {
-      if (key in body) await setSetting(key, String(body[key] ?? ""));
+      if (!(key in body)) continue;
+      if (SETTINGS_SECRET_KEYS.has(key) && isBlankSecret(body[key])) continue;
+      await setSetting(key, String(body[key] ?? ""));
     }
     res.json({ success: true });
   } catch (e: any) {

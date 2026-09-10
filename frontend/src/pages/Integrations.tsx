@@ -70,9 +70,13 @@ export default function Integrations() {
     
     const body = { ...formData };
     delete body.id;
+    delete body.api_key_set;
+    delete body.api_token_set;
     
     // defaults
     if (!body.status && modalType !== 'group') body.status = 'ACTIVE';
+    if (!body.api_key) delete body.api_key;
+    if (!body.api_token) delete body.api_token;
 
     await fetch(url, {
       method,
@@ -94,17 +98,22 @@ export default function Integrations() {
     setModalOpen(true);
   };
 
-  const renderInput = (label: string, field: string, type = 'text') => (
+  const renderInput = (label: string, field: string, type = 'text') => {
+    const secret = type === 'password';
+    return (
     <div className="mb-4">
       <label className="block text-xs text-white/50 mb-1.5">{label}</label>
       <input 
         type={type}
         value={formData[field] || ''}
+        placeholder={secret && formData.id ? 'оставьте пустым, чтобы не менять' : undefined}
+        autoComplete="off"
         onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
         className="w-full bg-black/20 border border-white/10 rounded-lg p-2 text-sm focus:outline-none focus:border-[#FFBC03]"
       />
     </div>
-  );
+    );
+  };
 
   const renderSelect = (label: string, field: string, options: any[]) => (
     <div className="mb-4">

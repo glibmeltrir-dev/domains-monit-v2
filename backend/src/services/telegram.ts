@@ -1,20 +1,25 @@
 import axios from "axios";
 import { query } from "../db/pool.ts";
 import { logger } from "../logger.ts";
+import { decrypt, encrypt } from "./crypto.ts";
+import { SETTINGS_SECRET_KEYS } from "./secrets.ts";
 
 export async function getSetting(key: string): Promise<string | null> {
   const { rows } = await query<{ value: string | null }>(
     "SELECT value FROM settings WHERE key = $1",
     [key]
   );
-  return rows[0]?.value ?? null;
+  const value = rows[0]?.value ?? null;
+  if (value && SETTINGS_SECRET_KEYS.has(key)) return decrypt(value);
+  return value;
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
+  const stored = SETTINGS_SECRET_KEYS.has(key) && value ? encrypt(value) : value;
   await query(
     `INSERT INTO settings (key, value) VALUES ($1, $2)
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-    [key, value]
+    [key, stored]
   );
 }
 

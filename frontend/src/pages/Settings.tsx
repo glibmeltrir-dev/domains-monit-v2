@@ -3,6 +3,7 @@ import { Save, Send, CheckCircle2 } from 'lucide-react';
 
 interface SettingsState {
   tg_bot_token: string;
+  tg_bot_token_set: boolean;
   tg_chat_ids: string;
   notify_monitoring: string;
   notify_expiry: string;
@@ -14,6 +15,7 @@ interface SettingsState {
 
 const defaults: SettingsState = {
   tg_bot_token: '',
+  tg_bot_token_set: false,
   tg_chat_ids: '',
   notify_monitoring: '1',
   notify_expiry: '1',
@@ -31,7 +33,20 @@ export default function Settings() {
   useEffect(() => {
     fetch('/api/settings')
       .then((r) => r.json())
-      .then((data) => setForm({ ...defaults, ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v ?? ''])) }));
+      .then((data) =>
+        setForm({
+          ...defaults,
+          tg_bot_token: '',
+          tg_bot_token_set: !!data.tg_bot_token_set,
+          tg_chat_ids: data.tg_chat_ids ?? '',
+          notify_monitoring: data.notify_monitoring ?? '1',
+          notify_expiry: data.notify_expiry ?? '1',
+          notify_purchase: data.notify_purchase ?? '1',
+          slow_threshold_ms: data.slow_threshold_ms ?? '1000',
+          ssl_reminder_days: data.ssl_reminder_days ?? '14,7,3,1',
+          namecheap_contact: data.namecheap_contact ?? '',
+        })
+      );
   }, []);
 
   const set = (key: keyof SettingsState, value: string) => setForm((f) => ({ ...f, [key]: value }));
@@ -70,9 +85,13 @@ export default function Settings() {
                 type="password"
                 value={form.tg_bot_token}
                 onChange={(e) => set('tg_bot_token', e.target.value)}
-                placeholder="123456789:AAH..."
+                placeholder={form.tg_bot_token_set ? 'сохранён, введите новый чтобы заменить' : '123456789:AAH...'}
+                autoComplete="off"
                 className="w-full bg-black/20 border border-white/10 rounded-lg p-2.5 text-sm focus:outline-none focus:border-[#FFBC03] transition-colors"
               />
+              {form.tg_bot_token_set && (
+                <p className="mt-1 text-xs text-white/40">Токен зашифрован в базе. Пустое поле — оставить как есть.</p>
+              )}
             </div>
             <div>
               <label className="block text-sm text-white/70 mb-1.5">Chat IDs (через запятую)</label>

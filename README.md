@@ -64,7 +64,16 @@ docker compose run --rm api npm run seed
 
 4. Откройте UI: http://localhost:8080
 
+Первый, кто откроет панель, регистрирует супер-админа. После этого регистрация закрыта.
+
 API доступен на `http://localhost:8080/api` (проксируется через nginx).
+
+Перед стартом обязательно задайте в `.env`:
+
+```bash
+openssl rand -hex 32   # ENCRYPTION_KEY
+openssl rand -hex 32   # SESSION_SECRET
+```
 
 ## Локальная разработка (без Docker)
 
@@ -132,5 +141,9 @@ make nuke       # ОПАСНО: удалить контейнеры и тома 
 
 ## Безопасность
 
-`.env` содержит секреты и добавлен в `.gitignore`. Присланные ключи Namecheap/Cloudflare
-рекомендуется ротировать после первого запуска.
+- Первый зарегистрированный пользователь становится супер-админом; повторная регистрация закрыта.
+- Вход — сессия в httpOnly cookie (7 дней), пароль — scrypt.
+- API-ключи Namecheap / Cloudflare / Keitaro и Telegram-токен шифруются в Postgres (AES-256-GCM, ключ `ENCRYPTION_KEY`). В UI секреты не возвращаются.
+- `.env` содержит секреты и добавлен в `.gitignore`. Не теряйте `ENCRYPTION_KEY` — без него расшифровать ключи в БД нельзя.
+- Присланные ключи Namecheap/Cloudflare рекомендуется ротировать после первого запуска.
+- Для HTTPS выставьте `COOKIE_SECURE=1`.

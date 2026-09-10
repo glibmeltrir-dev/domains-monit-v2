@@ -5,6 +5,7 @@ import { pool, query } from "./db/pool.ts";
 import { migrate } from "./db/migrate.ts";
 import { config } from "./config.ts";
 import { logger } from "./logger.ts";
+import { encrypt } from "./services/crypto.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,7 +48,7 @@ async function seedIntegrations(): Promise<{ keitaroId: number; monitorTemplateI
       "api_user",
       ncUser,
       ["name", "username", "api_user", "api_key", "client_ip", "status", "group_id"],
-      ["Main NC", ncName, ncUser, ncKey, process.env.NAMECHEAP_CLIENT_IP ?? "", "ACTIVE", groupId]
+      ["Main NC", ncName, ncUser, encrypt(ncKey), process.env.NAMECHEAP_CLIENT_IP ?? "", "ACTIVE", groupId]
     );
   }
 
@@ -56,10 +57,10 @@ async function seedIntegrations(): Promise<{ keitaroId: number; monitorTemplateI
   if (cfToken) {
     await upsertReturningId(
       "cloudflare_accounts",
-      "api_token",
-      cfToken,
+      "name",
+      "Main CF",
       ["name", "api_token", "email", "account_id", "status", "group_id"],
-      ["Main CF", cfToken, process.env.CLOUDFLARE_EMAIL ?? null, process.env.CLOUDFLARE_ACCOUNT_ID ?? null, "ACTIVE", groupId]
+      ["Main CF", encrypt(cfToken), process.env.CLOUDFLARE_EMAIL ?? null, process.env.CLOUDFLARE_ACCOUNT_ID ?? null, "ACTIVE", groupId]
     );
   }
 
@@ -73,7 +74,7 @@ async function seedIntegrations(): Promise<{ keitaroId: number; monitorTemplateI
     [
       "Keitaro Main",
       process.env.KEITARO_URL ?? "",
-      process.env.KEITARO_API_KEY ?? "",
+      encrypt(process.env.KEITARO_API_KEY ?? ""),
       keitaroIp,
       "ACTIVE",
       groupId,

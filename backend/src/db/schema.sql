@@ -109,6 +109,29 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+-- Panel users. The first registered account becomes super_admin; further
+-- self-registration is closed.
+CREATE TABLE IF NOT EXISTS users (
+  id            SERIAL PRIMARY KEY,
+  username      TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'super_admin',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower ON users (lower(username));
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  ip         TEXT,
+  user_agent TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);
+
 -- Columns added after the initial release (idempotent for existing databases).
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS resolved_ip        TEXT;      -- origin IP (from Cloudflare A record)
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS proxied            BOOLEAN;   -- Cloudflare orange-cloud on/off

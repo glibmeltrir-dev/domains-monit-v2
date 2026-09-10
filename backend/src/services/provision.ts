@@ -5,6 +5,7 @@ import { CloudflareClient, type CloudflareTemplate } from "./cloudflare.ts";
 import { NamecheapClient, type ContactProfile } from "./namecheap.ts";
 import { KeitaroClient } from "./keitaro.ts";
 import { sendTG, getSetting } from "./telegram.ts";
+import { revealSecrets } from "./secrets.ts";
 
 export interface ProvisionOptions {
   register: boolean;
@@ -35,7 +36,7 @@ export async function fetchDomainContext(domainId: number) {
      WHERE d.id = $1`,
     [domainId]
   );
-  return rows[0] ?? null;
+  return revealSecrets(rows[0] ?? null);
 }
 
 async function loadCfTemplate(id: number | null): Promise<CloudflareTemplate> {

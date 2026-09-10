@@ -2,6 +2,7 @@ import { Router } from "express";
 import { query } from "../db/pool.ts";
 import { provisionQueue } from "../queue/index.ts";
 import { NamecheapClient } from "../services/namecheap.ts";
+import { revealSecrets } from "../services/secrets.ts";
 
 export const purchaseRouter = Router();
 
@@ -19,10 +20,10 @@ async function pickAccount(table: string, groupId: number | null): Promise<any |
       `SELECT * FROM ${table} WHERE group_id = $1 ORDER BY id LIMIT 1`,
       [groupId]
     );
-    if (inGroup.rows[0]) return inGroup.rows[0];
+    if (inGroup.rows[0]) return revealSecrets(inGroup.rows[0]);
   }
   const any = await query(`SELECT * FROM ${table} ORDER BY id LIMIT 1`);
-  return any.rows[0] ?? null;
+  return revealSecrets(any.rows[0] ?? null);
 }
 
 async function resolveGroupAccounts(groupId: number | null): Promise<GroupAccounts> {

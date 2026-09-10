@@ -37,4 +37,29 @@ export const config = {
 
   // Default target server (Keitaro) all domains point their A record to.
   keitaroDefaultIp: process.env.KEITARO_DEFAULT_IP ?? "178.63.149.98",
+
+  encryption: {
+    // 64 hex chars (openssl rand -hex 32) or any passphrase ≥ 16 chars.
+    key: process.env.ENCRYPTION_KEY ?? "",
+  },
+
+  session: {
+    secret: process.env.SESSION_SECRET ?? "",
+    // Set COOKIE_SECURE=1 when the panel is served over HTTPS.
+    cookieSecure: process.env.COOKIE_SECURE === "1" || process.env.COOKIE_SECURE === "true",
+    ttlMs: 7 * 24 * 60 * 60 * 1000,
+  },
 } as const;
+
+export function assertSecretsConfigured(): void {
+  if (!config.encryption.key || config.encryption.key.length < 16) {
+    throw new Error(
+      "ENCRYPTION_KEY is required (≥16 chars, ideally `openssl rand -hex 32`). API keys cannot be stored without it."
+    );
+  }
+  if (!config.session.secret || config.session.secret.length < 16) {
+    throw new Error(
+      "SESSION_SECRET is required (≥16 chars, ideally `openssl rand -hex 32`)."
+    );
+  }
+}

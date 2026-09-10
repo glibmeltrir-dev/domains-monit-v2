@@ -1,8 +1,10 @@
 import { query } from "./db/pool.ts";
 import { monitorQueue } from "./queue/index.ts";
-import { config } from "./config.ts";
+import { assertSecretsConfigured, config } from "./config.ts";
 import { logger } from "./logger.ts";
 import { syncAll } from "./services/sync.ts";
+
+assertSecretsConfigured();
 
 // Find domains whose individual check interval has elapsed and enqueue a check
 // for each. Using a de-duplicated jobId prevents piling up duplicate checks if

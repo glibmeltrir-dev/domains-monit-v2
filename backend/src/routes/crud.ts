@@ -1,15 +1,18 @@
 import { Router } from "express";
 import { query } from "../db/pool.ts";
+import { encryptSecretsInBody } from "../services/secrets.ts";
 
 // Whitelisted tables and their writable columns. Anything not listed is rejected
 // to avoid SQL/column injection through the generic endpoint.
-const TABLES: Record<string, { columns: string[]; booleans?: string[] }> = {
+const TABLES: Record<string, { columns: string[]; booleans?: string[]; requiredOnCreate?: string[] }> = {
   integration_groups: { columns: ["name"] },
   namecheap_accounts: {
     columns: ["name", "username", "api_user", "api_key", "client_ip", "status", "balance", "group_id"],
+    requiredOnCreate: ["name", "username", "api_user", "api_key"],
   },
   cloudflare_accounts: {
     columns: ["name", "api_token", "email", "account_id", "status", "group_id"],
+    requiredOnCreate: ["name", "api_token"],
   },
   keitaro_trackers: {
     columns: ["name", "url", "api_key", "server_ip", "status", "group_id"],
@@ -72,7 +75,10 @@ crudRouter.post("/:table", async (req, res) => {
   const { table } = req.params;
   if (!TABLES[table]) return res.status(400).json({ error: "Invalid table" });
   try {
-    const { cols, values } = sanitize(table, req.body ?? {});
+    const body = encryptSecretsInBody(table, { ...(req.body ?? {}) });
+    const missing = (TABLES[table].requiredOnCreate ?? []).filter((f) => !(f in body) || body[f] == null);
+    if (missing.length) return res.status(400).json({ error: `Нужно заполнить: ${missing.join(", ")}` });
+    const { cols, values } = sanitize(table, body);
     if (!cols.length) return res.status(400).json({ error: "No valid columns" });
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
     const { rows } = await query(
@@ -89,7 +95,8 @@ crudRouter.put("/:table/:id", async (req, res) => {
   const { table, id } = req.params;
   if (!TABLES[table]) return res.status(400).json({ error: "Invalid table" });
   try {
-    const { cols, values } = sanitize(table, req.body ?? {});
+    const body = encryptSecretsInBody(table, { ...(req.body ?? {}) });
+    const { cols, values } = sanitize(table, body);
     if (!cols.length) return res.status(400).json({ error: "No valid columns" });
     const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
     await query(`UPDATE ${table} SET ${sets} WHERE id = $${cols.length + 1}`, [

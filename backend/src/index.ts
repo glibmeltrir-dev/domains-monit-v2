@@ -1,9 +1,10 @@
 import { createApp } from "./api.ts";
 import { migrate } from "./db/migrate.ts";
-import { config } from "./config.ts";
+import { assertSecretsConfigured, config } from "./config.ts";
 import { logger } from "./logger.ts";
 
 async function main() {
+  assertSecretsConfigured();
   // Ensure schema exists before serving requests.
   await migrate();
 

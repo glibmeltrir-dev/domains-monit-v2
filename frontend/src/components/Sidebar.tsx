@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Globe, PlusCircle, RefreshCcw, Network, LayoutTemplate, Settings } from 'lucide-react';
+import { Globe, PlusCircle, RefreshCcw, Network, LayoutTemplate, Settings, LogOut } from 'lucide-react';
 import clsx from 'clsx';
+import { useAuth } from '../auth.tsx';
 
 export default function Sidebar() {
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const links = [
     { name: 'Домены', icon: Globe, path: '/domains' },
@@ -44,6 +46,20 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="mt-4 pt-4 border-t border-white/10">
+        <div className="px-3 mb-2 text-xs text-white/40 truncate" title={user?.role}>
+          {user?.username}
+          {user?.role === 'super_admin' && <span className="ml-1 text-[#FFBC03]">admin</span>}
+        </div>
+        <button
+          onClick={() => logout()}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+        >
+          <LogOut className="w-5 h-5 text-white/40" />
+          Выйти
+        </button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { logger } from "../logger.ts";
 import { KeitaroClient, keitaroHasGroup } from "./keitaro.ts";
 import { sendTG } from "./telegram.ts";
 import { fetchDomainContext, repointDomain } from "./provision.ts";
+import { revealSecrets } from "./secrets.ts";
 
 function normalizeDomain(raw: string): string {
   return String(raw || "")
@@ -122,7 +123,7 @@ export async function listCleanKeitaroDomains(oldId?: number): Promise<string[]>
       "SELECT url, api_key FROM keitaro_trackers WHERE status = 'ACTIVE' AND url <> '' AND api_key <> '' ORDER BY id LIMIT 1"
     );
     url = rows[0]?.url ?? null;
-    key = rows[0]?.api_key ?? null;
+    key = revealSecrets(rows[0] ?? null)?.api_key ?? null;
   }
   if (!url || !key) throw new Error("Нет активного трекера Keitaro");
 

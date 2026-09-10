@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { query } from "../db/pool.ts";
 import { NamecheapClient } from "../services/namecheap.ts";
+import { redactSecretsForApi, revealSecrets } from "../services/secrets.ts";
 
 export const integrationsRouter = Router();
 
@@ -11,14 +12,14 @@ integrationsRouter.post("/namecheap/:id/refresh-balance", async (req, res) => {
       "SELECT * FROM namecheap_accounts WHERE id = $1",
       [req.params.id]
     );
-    const acc = rows[0];
+    const acc = revealSecrets(rows[0]);
     if (!acc) return res.status(404).json({ error: "Account not found" });
 
     const nc = new NamecheapClient({
-      apiUser: acc.api_user,
-      apiKey: acc.api_key,
-      userName: acc.username,
-      clientIp: acc.client_ip || "",
+      apiUser: String(acc.api_user ?? ""),
+      apiKey: String(acc.api_key ?? ""),
+      userName: String(acc.username ?? ""),
+      clientIp: String(acc.client_ip || ""),
     });
     const balance = await nc.getBalance();
     await query("UPDATE namecheap_accounts SET balance = $1 WHERE id = $2", [
@@ -40,9 +41,12 @@ integrationsRouter.get("/", async (_req, res) => {
       query("SELECT * FROM integration_groups ORDER BY id"),
     ]);
     res.json({
-      namecheap: namecheap.rows.map((r) => ({ ...r, balance: Number(r.balance) })),
-      cloudflare: cloudflare.rows,
-      keitaro: keitaro.rows,
+      namecheap: namecheap.rows.map((r) => ({
+        ...redactSecretsForApi("namecheap_accounts", r),
+        balance: Number(r.balance),
+      })),
+      cloudflare: cloudflare.rows.map((r) => redactSecretsForApi("cloudflare_accounts", r)),
+      keitaro: keitaro.rows.map((r) => redactSecretsForApi("keitaro_trackers", r)),
       groups: groups.rows,
     });
   } catch (e: any) {

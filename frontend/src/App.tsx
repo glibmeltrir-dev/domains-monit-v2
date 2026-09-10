@@ -11,8 +11,22 @@ import Templates from './pages/Templates.tsx';
 import Purchase from './pages/Purchase.tsx';
 import Replace from './pages/Replace.tsx';
 import Settings from './pages/Settings.tsx';
+import Login from './pages/Login.tsx';
+import { useAuth } from './auth.tsx';
 
 export default function App() {
+  const { loading, user } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#212121] text-white/50 flex items-center justify-center">
+        Загрузка…
+      </div>
+    );
+  }
+
+  if (!user) return <Login />;
+
   return (
     <Router>
       <div className="flex h-screen bg-[#212121] text-white">

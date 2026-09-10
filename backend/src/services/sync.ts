@@ -3,6 +3,7 @@ import { logger } from "../logger.ts";
 import { CloudflareClient } from "./cloudflare.ts";
 import { NamecheapClient } from "./namecheap.ts";
 import { KeitaroClient, keitaroHasGroup } from "./keitaro.ts";
+import { revealSecrets } from "./secrets.ts";
 
 export interface SyncSummary {
   domains: number;
@@ -41,7 +42,9 @@ export async function syncAll(): Promise<SyncSummary> {
     }>("SELECT id, api_token, account_id FROM cloudflare_accounts WHERE status = 'ACTIVE'");
 
     for (const acc of cfAccounts) {
-      const cf = new CloudflareClient(acc.api_token, acc.account_id ?? undefined);
+      const token = revealSecrets(acc)?.api_token;
+      if (!token) continue;
+      const cf = new CloudflareClient(String(token), acc.account_id ?? undefined);
       let zones;
       try {
         zones = await cf.listZones();
@@ -97,9 +100,10 @@ export async function syncAll(): Promise<SyncSummary> {
     );
 
     for (const acc of ncAccounts) {
+      const revealed = revealSecrets(acc);
       const nc = new NamecheapClient({
-        apiUser: acc.api_user,
-        apiKey: acc.api_key,
+        apiUser: String(revealed?.api_user ?? acc.api_user),
+        apiKey: String(revealed?.api_key ?? ""),
         userName: acc.username,
         clientIp: acc.client_ip || "",
       });
@@ -140,7 +144,8 @@ export async function syncAll(): Promise<SyncSummary> {
       const domainGroup = new Map<string, { id: number | null; name: string | null }>();
       for (const t of trackers) {
         try {
-          const client = new KeitaroClient(t.url, t.api_key);
+          const key = String(revealSecrets(t)?.api_key ?? "");
+          const client = new KeitaroClient(t.url, key);
           const list = await client.listDomains();
           for (const d of list) {
             const name = String(d.name).toLowerCase();
